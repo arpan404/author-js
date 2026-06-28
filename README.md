@@ -6,10 +6,6 @@
 
 Author JS is a TypeScript-first authorization toolkit for apps that need one clear permission model across API routes, server actions, React UI, and database-backed grants.
 
-It is built around a boring question:
-
-> Can this entity do this action on this resource, right now?
-
 ```ts
 const allowed = await author
   .as(user)
@@ -17,20 +13,18 @@ const allowed = await author
   .on("Project", project);
 ```
 
-Frontend checks are useful for hiding buttons. Backend checks are the security boundary.
+Frontend checks are for UX. Backend checks are the security boundary.
 
-## Why Author JS?
-
-Most SaaS apps outgrow simple `user.role === "admin"` checks. You eventually need:
+## What it supports
 
 - RBAC: admins, owners, members, viewers
-- ABAC: ownership, visibility, tenant, IP, time, feature flags
+- ABAC: ownership, visibility, tenant, request context
 - ReBAC: user is owner/member/viewer of a specific object
-- parent checks: project belongs to organization, document belongs to folder
-- UI checks in React without duplicating backend logic
-- adapter-backed grants in PostgreSQL, MongoDB, Redis, or memory for tests
-
-Author JS keeps those as regular TypeScript policies instead of a separate policy language.
+- parent checks: project → organization, document → folder
+- subscription features and numeric limits
+- React UI checks
+- Express, Hono, Fastify, Elysia, and Next.js helpers
+- Memory, PostgreSQL, MongoDB, Redis cache adapters
 
 ## Install
 
@@ -38,7 +32,7 @@ Author JS keeps those as regular TypeScript policies instead of a separate polic
 bun add author-js
 ```
 
-Optional adapters:
+Optional peer dependencies:
 
 ```bash
 bun add pg react
@@ -52,13 +46,13 @@ import { allow, createAuthor, defineEntity, defineResource } from "author-js";
 type User = {
   id: string;
   role: "admin" | "member";
+  plan: "free" | "pro";
 };
 
 type Project = {
   id: string;
   ownerId: string;
   orgId: string;
-  visibility: "public" | "private";
 };
 
 const UserEntity = defineEntity<User>()({
@@ -69,18 +63,26 @@ const UserEntity = defineEntity<User>()({
 const ProjectResource = defineResource<Project>()({
   type: "Project",
   id: (project) => project.id,
-  actions: ["read", "update", "delete"] as const,
+  actions: ["read", "create", "update", "delete"] as const,
   parents: {
-    organization: {
-      type: "Organization",
-      id: (project) => project.orgId,
-    },
+    organization: { type: "Organization", id: (project) => project.orgId },
   },
 });
 
 export const author = createAuthor({
   entities: { User: UserEntity },
   resources: { Project: ProjectResource },
+  entitlements: {
+    plan: ({ entity }) => entity.plan,
+    features: {
+      free: ["projects.read"],
+      pro: ["projects.read", "projects.create"],
+    },
+    limits: {
+      free: { projects: 3 },
+      pro: { projects: 100 },
+    },
+  },
   policies: [
     allow("admins can do anything", ({ entity }) => entity.role === "admin"),
 
@@ -89,23 +91,21 @@ export const author = createAuthor({
       return action === "update" && entity.id === resource.data.ownerId;
     }),
 
-    allow("organization admins can update projects", async (ctx) => {
-      if (ctx.resource.type !== "Project") return false;
-      if (ctx.action !== "update") return false;
-      return ctx.parents.hasRole("admin", "organization");
+    allow("plan can create projects", async (ctx) => {
+      if (ctx.action !== "create") return false;
+      return ctx.features.has("projects.create");
     }),
   ],
 });
 ```
 
-Use it in backend code:
+Use it on the backend:
 
 ```ts
 await author.as(user).can("update").on("Project", project).throw();
-// continue only when allowed
 ```
 
-Use it in UI code:
+Use it in React:
 
 ```tsx
 import { AuthorProvider, Can } from "author-js/react";
@@ -117,59 +117,61 @@ import { AuthorProvider, Can } from "author-js/react";
 </AuthorProvider>;
 ```
 
-## Subscription features and limits
+## Keep policies modular
 
-Add plan-based entitlements without changing the check API:
+Author JS does not require one giant authorization file. Split rules by feature and merge arrays.
 
 ```ts
-const author = createAuthor({
+// policies/project.ts
+export const projectPolicies = [
+  allow("project owners can update", ({ entity, resource, action }) => {
+    if (resource.type !== "Project") return false;
+    return action === "update" && entity.id === resource.data.ownerId;
+  }),
+] as const;
+```
+
+```ts
+// authorization/author.ts
+export const author = createAuthor({
   entities,
   resources,
-  entitlements: {
-    plan: async ({ entity }) => entity.plan,
-    features: {
-      free: ["projects.read"],
-      pro: ["projects.read", "projects.create"],
-    },
-    limits: {
-      free: { projects: 3 },
-      pro: { projects: 100 },
-    },
-  },
+  entitlements,
   policies: [
-    allow("plan can create projects", async (ctx) => {
-      if (ctx.action !== "create") return false;
-      if (!(await ctx.features.has("projects.create"))) return false;
-
-      const used = await countProjects(ctx.entity.id);
-      return ctx.limits.within("projects", { used });
-    }),
+    ...organizationPolicies,
+    ...projectPolicies,
+    ...billingPolicies,
   ],
 });
 ```
 
-## Decisions, not just booleans
+See [Core guide](./docs/core.md) for a complete structure.
+
+## Centralize plans
+
+Keep plans in one file so billing behavior is easy to review.
 
 ```ts
-const decision = await author
-  .as(user)
-  .can("update")
-  .on("Project", project)
-  .explain();
+export const plans = {
+  free: { features: ["projects.read"], limits: { projects: 3 } },
+  pro: { features: ["projects.read", "projects.create"], limits: { projects: 100 } },
+} as const;
 
-console.log(decision.allowed);
-console.log(decision.reason);
-console.log(decision.matchedPolicies);
+export const entitlements = {
+  plan: ({ entity }) => entity.plan,
+  features: Object.fromEntries(Object.entries(plans).map(([name, plan]) => [name, plan.features])),
+  limits: Object.fromEntries(Object.entries(plans).map(([name, plan]) => [name, plan.limits])),
+};
 ```
 
-Rules are evaluated with deny-overrides-allow semantics:
+Policies can then use:
 
-1. run all policies
-2. any matching deny wins
-3. otherwise any matching allow wins
-4. otherwise deny by default
+```ts
+await ctx.features.has("projects.create");
+await ctx.limits.within("projects", { used: projectCount });
+```
 
-## Imports
+## Entry points
 
 ```ts
 import { createAuthor } from "author-js";
@@ -180,9 +182,8 @@ import { AuthorProvider, Can } from "author-js/react";
 import { requireCan } from "author-js/express";
 ```
 
-Available entrypoints:
+Available adapters:
 
-- `author-js` / `author-js/core`
 - `author-js/postgres`
 - `author-js/mongodb`
 - `author-js/redis`
@@ -195,10 +196,10 @@ Available entrypoints:
 
 ## Documentation
 
-- [Core concepts](./docs/core.md)
+- [Core guide](./docs/core.md)
 - [Store and cache adapters](./docs/adapters.md)
-- [React usage](./docs/react.md)
-- [Framework middleware](./docs/frameworks.md)
+- [React guide](./docs/react.md)
+- [Framework guide](./docs/frameworks.md)
 - [Publishing](./docs/publishing.md)
 - [Security policy](./SECURITY.md)
 

@@ -1,58 +1,43 @@
-# Core concepts
+# Core guide
 
-Author JS is intentionally small. You define the things in your app, write policies as TypeScript functions, and ask the engine for a decision.
+Author JS is built around one request:
 
 ```txt
-entity + action + resource + context => decision
+Can this entity do this action on this resource with this context?
 ```
 
-A good policy should read like a product rule:
+Everything else exists to make that question easy to answer in real apps: roles, attributes, relationships, parent resources, subscription plans, limits, and framework middleware.
+
+## 1. Define your domain
+
+Start by teaching Author JS how to identify your actors and resources.
 
 ```ts
-allow("owners can update their projects", ({ entity, resource, action }) => {
-  if (resource.type !== "Project") return false;
-  return action === "update" && entity.id === resource.data.ownerId;
-});
-```
+import { defineEntity, defineResource } from "author-js";
 
-## Entities
+type User = {
+  id: string;
+  orgId: string;
+  role: "admin" | "member";
+  plan: "free" | "pro";
+};
 
-An entity is the actor. Usually this is a user, but it can also be an API key, service account, organization, or bot.
+type Project = {
+  id: string;
+  orgId: string;
+  ownerId: string;
+  visibility: "public" | "private";
+};
 
-```ts
-const User = defineEntity<User>()({
+export const UserEntity = defineEntity<User>()({
   type: "User",
   id: (user) => user.id,
 });
-```
 
-The `type` and `id` are what Author JS stores in decisions, roles, permissions, relations, and audit logs.
-
-## Resources
-
-A resource is the thing being protected.
-
-```ts
-const Project = defineResource<Project>()({
+export const ProjectResource = defineResource<Project>()({
   type: "Project",
   id: (project) => project.id,
-  actions: ["read", "update", "delete"] as const,
-});
-```
-
-Actions are checked at runtime. Asking for an action that is not listed on the resource throws an `UnknownActionError`.
-
-## Parent resources
-
-Many permissions live on a parent object. A project belongs to an organization. A document belongs to a folder. A folder belongs to a workspace.
-
-Define parent references on the child resource:
-
-```ts
-const Project = defineResource<Project>()({
-  type: "Project",
-  id: (project) => project.id,
-  actions: ["read", "update", "delete"] as const,
+  actions: ["read", "create", "update", "delete"] as const,
   parents: {
     organization: {
       type: "Organization",
@@ -62,7 +47,173 @@ const Project = defineResource<Project>()({
 });
 ```
 
-Parent permissions are **not inherited automatically**. That is deliberate. Automatic inheritance is hard to reason about and easy to over-grant. Instead, use explicit parent helpers inside policies.
+The `type` and `id` values are used everywhere: decisions, audit logs, roles, permissions, relationships, and parent checks.
+
+## 2. Write policies as normal TypeScript
+
+Policies are named rules. They return `true` when they match and `false` when they do not.
+
+```ts
+import { allow, deny } from "author-js";
+
+export const projectPolicies = [
+  allow("admins can do anything", ({ entity }) => entity.role === "admin"),
+
+  allow("owners can update their projects", ({ entity, resource, action }) => {
+    if (resource.type !== "Project") return false;
+    return action === "update" && entity.id === resource.data.ownerId;
+  }),
+
+  deny("members cannot delete projects", ({ entity, action }) => {
+    return entity.role === "member" && action === "delete";
+  }),
+] as const;
+```
+
+Evaluation is predictable:
+
+1. all policies run
+2. any matching deny wins
+3. otherwise any matching allow wins
+4. otherwise deny by default
+
+## 3. Create the author instance
+
+```ts
+import { createAuthor } from "author-js";
+import { UserEntity, ProjectResource } from "./authorization.definitions";
+import { projectPolicies } from "./project.policies";
+
+export const author = createAuthor({
+  entities: { User: UserEntity },
+  resources: { Project: ProjectResource },
+  policies: [...projectPolicies],
+});
+```
+
+Then check permissions:
+
+```ts
+const allowed = await author.as(user).can("update").on("Project", project);
+
+await author.as(user).can("delete").on("Project", project).throw();
+
+const decision = await author.as(user).can("read").on("Project", project).explain();
+```
+
+## 4. Keep authorization files small
+
+Do not put every policy in one giant file. Split by feature and merge arrays at the composition point.
+
+```txt
+src/authorization/
+  definitions.ts
+  plans.ts
+  author.ts
+  policies/
+    organization.ts
+    project.ts
+    billing.ts
+```
+
+Example policy modules:
+
+```ts
+// policies/project.ts
+import { allow } from "author-js";
+
+export const projectPolicies = [
+  allow("project owners can update", ({ entity, resource, action }) => {
+    if (resource.type !== "Project") return false;
+    return action === "update" && entity.id === resource.data.ownerId;
+  }),
+] as const;
+```
+
+```ts
+// policies/billing.ts
+import { allow } from "author-js";
+
+export const billingPolicies = [
+  allow("plan can create projects", async (ctx) => {
+    if (ctx.action !== "create") return false;
+    if (!(await ctx.features.has("projects.create"))) return false;
+
+    const used = Number(ctx.context["projectCount"] ?? 0);
+    return ctx.limits.within("projects", { used });
+  }),
+] as const;
+```
+
+Merge them without adding a framework or registry:
+
+```ts
+// author.ts
+export const author = createAuthor({
+  entities,
+  resources,
+  entitlements,
+  policies: [
+    ...organizationPolicies,
+    ...projectPolicies,
+    ...billingPolicies,
+  ],
+});
+```
+
+That is usually enough. Add fancier plugin systems only when plain arrays stop working.
+
+## 5. Centralize plans and limits
+
+Keep subscription features in one boring config file. This makes billing behavior reviewable.
+
+```ts
+// plans.ts
+export const plans = {
+  free: {
+    features: ["projects.read"],
+    limits: { projects: 3, seats: 1 },
+  },
+  pro: {
+    features: ["projects.read", "projects.create", "members.invite"],
+    limits: { projects: 100, seats: 10 },
+  },
+  enterprise: {
+    features: ["projects.read", "projects.create", "members.invite", "audit.read"],
+    limits: { projects: 10_000, seats: 500 },
+  },
+} as const;
+
+export type PlanName = keyof typeof plans;
+
+export const entitlements = {
+  plan: async ({ entity }: { entity: { plan: PlanName } }) => entity.plan,
+  features: Object.fromEntries(
+    Object.entries(plans).map(([name, plan]) => [name, plan.features]),
+  ),
+  limits: Object.fromEntries(
+    Object.entries(plans).map(([name, plan]) => [name, plan.limits]),
+  ),
+};
+```
+
+Use the helpers in policies:
+
+```ts
+allow("plan can invite members", async (ctx) => {
+  if (ctx.action !== "invite") return false;
+  if (!(await ctx.features.has("members.invite"))) return false;
+
+  const usedSeats = Number(ctx.context["usedSeats"] ?? 0);
+  return ctx.limits.within("seats", { used: usedSeats });
+});
+```
+
+Author JS does not count usage for you. Your app knows where usage lives. Pass counts in `context` or query them inside the policy.
+
+## 6. Use parent helpers explicitly
+
+Parent permissions are not inherited automatically. Automatic inheritance is easy to over-grant. Author JS gives helpers so the rule remains visible.
 
 ```ts
 allow("organization admins can update projects", async (ctx) => {
@@ -73,135 +224,43 @@ allow("organization admins can update projects", async (ctx) => {
 });
 ```
 
-Available parent helpers:
+Available helpers:
 
 ```ts
-await ctx.parents.get("organization");          // ParentRef | null
-await ctx.parents.getRequired("organization");  // ParentRef or throws
-await ctx.parents.list();                        // all parent refs
+await ctx.parents.get("organization");
+await ctx.parents.getRequired("organization");
+await ctx.parents.list();
 
 await ctx.parents.hasRole("admin", "organization");
 await ctx.parents.hasPermission("read", "organization");
 await ctx.parents.hasRelation("member", "organization");
 ```
 
-Use `getRequired` when missing parent configuration is a programmer error. Use `get` when a parent is optional.
+Use `getRequired` when missing parent configuration is a bug. Use `get` when the parent is optional.
 
-## Policies
+## 7. Pass request context when needed
 
-Policies are named allow or deny rules.
+Context is for request-specific data, not global config.
 
 ```ts
-allow("public projects can be read", ({ resource, action }) => {
-  if (resource.type !== "Project") return false;
-  return action === "read" && resource.data.visibility === "public";
-});
-
-deny("members cannot delete projects", ({ entity, action }) => {
-  return entity.role === "member" && action === "delete";
+await author.as(user).can("create").on("Project", project, {
+  ip: request.ip,
+  projectCount: await countProjects(user.id),
+  usedSeats: await countOrgMembers(user.orgId),
 });
 ```
 
-A policy can return:
-
-- `true` — policy matched
-- `false` — policy skipped
-- `allow/deny/skip(...)` style structured result
-
-Deny policies override allow policies. If no allow policy matches, the final decision is deny.
-
-## Policy context
-
-Inside a policy you get:
+Then policies can read it:
 
 ```ts
-ctx.entity       // current actor
-ctx.action       // action string
-ctx.resource     // { type, id, data }
-ctx.context      // caller-provided context
-ctx.mode         // "backend" | "frontend"
-ctx.store        // underlying store adapter
-```
-
-And helper groups:
-
-```ts
-ctx.roles.has("admin");
-ctx.roles.has("admin", { type: "Organization", id: "org_1" });
-ctx.roles.list();
-
-ctx.permissions.has("read", { type: "Project", id: "project_1" });
-ctx.permissions.list();
-
-ctx.relations.has({
-  subjectType: "User",
-  subjectId: "user_1",
-  relation: "owner",
-  objectType: "Project",
-  objectId: "project_1",
-});
-ctx.entityHasRelation("owner");
-```
-
-## Subscription features and limits
-
-Author JS can expose plan-based entitlements inside policies. This keeps your public check API unchanged while letting policies consider billing plans, feature flags, and numeric limits.
-
-```ts
-const author = createAuthor({
-  entities,
-  resources,
-  entitlements: {
-    plan: async ({ entity }) => entity.plan,
-    features: {
-      free: ["projects.read"],
-      pro: ["projects.read", "projects.create"],
-    },
-    limits: {
-      free: { projects: 3 },
-      pro: { projects: 100 },
-    },
-  },
-  policies: [
-    allow("plan can create projects", async (ctx) => {
-      if (ctx.action !== "create") return false;
-      if (!(await ctx.features.has("projects.create"))) return false;
-
-      const used = await countProjects(ctx.entity.id);
-      return ctx.limits.within("projects", { used });
-    }),
-  ],
+allow("trusted IP can read reports", ({ action, context }) => {
+  return action === "read" && context.ip === "127.0.0.1";
 });
 ```
 
-Helpers:
+## 8. Decision shape
 
-```ts
-await ctx.subscription.plan();
-await ctx.features.has("projects.create");
-await ctx.features.list();
-await ctx.limits.get("projects");
-await ctx.limits.within("projects", { used: 2 });
-await ctx.limits.remaining("projects", { used: 2 });
-```
-
-Limits are not counted automatically. Your app owns usage queries because usage often lives in your domain database. Author JS only compares `used` against the configured plan limit.
-
-## Decisions
-
-Use `.allowed()` when you only need a boolean:
-
-```ts
-const allowed = await author.as(user).can("update").on("Project", project).allowed();
-```
-
-The chain is also thenable:
-
-```ts
-const allowed = await author.as(user).can("update").on("Project", project);
-```
-
-Use `.explain()` when debugging or auditing:
+`.explain()` returns a rich decision:
 
 ```ts
 const decision = await author.as(user).can("update").on("Project", project).explain();
@@ -212,29 +271,4 @@ console.log(decision.matchedPolicies);
 console.log(decision.skippedPolicies);
 ```
 
-Use `.throw()` at backend enforcement points:
-
-```ts
-await author.as(user).can("delete").on("Project", project).throw();
-```
-
-When denied, `.throw()` raises `AuthorizationDeniedError` with the decision attached in `error.details.decision`.
-
-## Custom request context
-
-Pass request-specific data to policies:
-
-```ts
-await author
-  .as(user)
-  .can("read")
-  .on("Report", report, { ip: request.ip, tenantId: request.tenantId });
-```
-
-Then read it in policy code:
-
-```ts
-allow("trusted IP can read report", ({ context, action }) => {
-  return action === "read" && context.ip === "127.0.0.1";
-});
-```
+Use this for tests, logs, admin tooling, and debugging.
