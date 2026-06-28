@@ -29,7 +29,7 @@ bun add pg react
 ## Quick start
 
 ```ts
-import { allow, createAuthor, defineAuthorModule, defineEntity, defineResource } from "author-js";
+import { createAuthor, defineAuthorModule, defineEntity, defineResource, policy } from "author-js";
 
 type User = { id: string; role: "admin" | "member" };
 type Project = { id: string; ownerId: string };
@@ -49,16 +49,16 @@ const projectModule = defineAuthorModule({
   name: "projects",
   resources: { Project: ProjectResource },
   policies: [
-    allow(
-      "admins can do anything",
-      { entityTypes: ["User"], resourceTypes: ["Project"], actions: ["read", "update", "delete"] },
-      ({ entity }) => entity.role === "admin",
-    ),
-    allow(
-      "owners can update projects",
-      { entityTypes: ["User"], resourceTypes: ["Project"], actions: ["update"] },
-      ({ entity, resource }) => entity.id === resource.data.ownerId,
-    ),
+    policy
+      .for("User")
+      .on("Project")
+      .can(["read", "update", "delete"])
+      .allow("admins can do anything", ({ entity }) => entity.role === "admin"),
+    policy
+      .for("User")
+      .on("Project")
+      .can("update")
+      .allow("owners can update projects", ({ entity, resource }) => entity.id === resource.data.ownerId),
   ],
 });
 
@@ -71,6 +71,7 @@ await author.as("User", user).can("update").on("Project", project).throw();
 ```
 
 Policy scopes are static applicability metadata. The engine uses them to select only policies relevant to the current entity type, resource type, and action.
+For boolean checks, deny rules are evaluated before allow rules and the engine stops as soon as the result is known. Use `.explain()` when you need a full decision with all matching and skipped policies.
 
 ## Permission management
 

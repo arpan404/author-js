@@ -101,11 +101,43 @@ Collections:
 - `author_relations`
 - `author_audit_logs`
 
+### Direct helper checks
+
+Stores must implement list methods such as `getRoles`, `getPermissions`, and `getRelations`. For better hot-path performance, stores can also implement direct existence checks:
+
+```ts
+const store = {
+  async getRoles(input) {
+    // list roles for management screens and fallback policy helpers
+  },
+  async hasRole(input) {
+    // return true when this entity has input.role in the optional scope
+  },
+  async hasPermission(input) {
+    // return true when an allow grant exists and no matching deny grant exists
+  },
+  async hasRelation(input) {
+    // return true when at least one relation tuple matches the query
+  },
+};
+```
+
+Policy helpers use these methods when present:
+
+```ts
+await ctx.roles.has("admin", { type: "Organization", id: "org_1" });
+await ctx.permissions.has("read", { type: "Project", id: "project_1" });
+await ctx.relations.has({ subjectType: "User", subjectId: "user_1", relation: "owner" });
+await ctx.parents.hasRole("admin", "organization");
+```
+
+The memory, PostgreSQL, and MongoDB stores include direct checks.
+
 ## Audit logs
 
 Stores that implement `writeAuditLog` receive a log entry after each decision. Each entry records the outcome, matched policies, and actor.
 
-For high-volume apps, use a custom store that queues or samples writes.
+For high-volume apps, use `audit: "explain"` or `audit: "none"` in `createAuthor`, or use a custom store that queues or samples writes.
 
 ## Decision cache
 

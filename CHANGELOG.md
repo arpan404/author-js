@@ -1,9 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - add `defineAuthorModule` for domain-level authorization modules
 - add scoped policy metadata for entity, resource, and action preselection
+- add fluent `policy.for(...).on(...).can(...).allow/deny` helpers for resource/action-specific rules
+- add after-decision hooks for scoped metrics, custom logs, and side effects
+- add wildcard-aware nested rule indexing with separate deny/allow fast paths
+- add configurable audit mode with `all`, `explain`, and `none`
+- add optional direct `hasRole`, `hasPermission`, and `hasRelation` store checks
 - add `author.check(...)` for direct boolean checks
 - add request-local memoization for repeated store and entitlement helper reads
 - add custom decision cache key support
