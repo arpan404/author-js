@@ -118,8 +118,20 @@ const author = createAuthor({
   cache: memoryCache(),
   cacheTtlMs: 30_000,
   entities,
-  resources,
-  policies,
+  modules,
+  policies: globalPolicies,
+});
+```
+
+By default, cache keys are generated from the entity, action, resource, mode, context, and resource data using a stable SHA-256 key. For apps with their own stable resource versioning, provide a custom key resolver:
+
+```ts
+const author = createAuthor({
+  cache,
+  cacheKey: ({ entityType, entityId, action, resourceType, resourceId }) =>
+    `${entityType}:${entityId}:${action}:${resourceType}:${resourceId}`,
+  entities,
+  modules,
 });
 ```
 
@@ -137,8 +149,8 @@ const author = createAuthor({
   cache,
   cacheTtlMs: 30_000,
   entities,
-  resources,
-  policies,
+  modules,
+  policies: globalPolicies,
 });
 ```
 

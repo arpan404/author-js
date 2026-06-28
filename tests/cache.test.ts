@@ -61,6 +61,32 @@ describe("cache", () => {
     expect(calls).toBe(2);
   });
 
+  test("createAuthor accepts a custom decision cache key resolver", async () => {
+    let calls = 0;
+    let keyCalls = 0;
+    const cache = memoryCache();
+    const author = createAuthor({
+      cache,
+      cacheKey: (input) => {
+        keyCalls += 1;
+        return `${input.entityType}:${input.entityId}:${input.action}:${input.resourceType}:${input.resourceId}`;
+      },
+      entities: { User: UserEntity },
+      resources: { Project: ProjectResource },
+      policies: [
+        allow("cached by custom key", () => {
+          calls += 1;
+          return true;
+        }),
+      ],
+    });
+
+    expect(await author.as("User", { id: "u1" }).can("read").on("Project", { id: "p1", ownerId: "u1" })).toBe(true);
+    expect(await author.as("User", { id: "u1" }).can("read").on("Project", { id: "p1", ownerId: "u1" })).toBe(true);
+    expect(calls).toBe(1);
+    expect(keyCalls).toBe(2);
+  });
+
   test("redisCache stores and deletes decisions with prefix", async () => {
     const client = new FakeRedis();
     const cache = redisCache({ client, prefix: "app-auth" });

@@ -59,25 +59,50 @@ Policies are named rules. Return `true` to match, `false` to skip.
 import { allow, deny } from "author-js";
 
 export const projectPolicies = [
-  allow("admins can do anything", ({ entity }) => entity.role === "admin"),
+  allow(
+    "admins can do anything",
+    { entityTypes: ["User"], resourceTypes: ["Project"], actions: ["read", "create", "update", "delete"] },
+    ({ entity }) => entity.role === "admin",
+  ),
 
-  allow("owners can update projects", ({ entity, resource, action }) => {
-    if (resource.type !== "Project") return false;
-    return action === "update" && entity.id === resource.data.ownerId;
-  }),
+  allow(
+    "owners can update projects",
+    { entityTypes: ["User"], resourceTypes: ["Project"], actions: ["update"] },
+    ({ entity, resource }) => entity.id === resource.data.ownerId,
+  ),
 
-  deny("members cannot delete projects", ({ entity, action }) => {
-    return entity.role === "member" && action === "delete";
-  }),
+  deny(
+    "members cannot delete projects",
+    { entityTypes: ["User"], resourceTypes: ["Project"], actions: ["delete"] },
+    ({ entity }) => entity.role === "member",
+  ),
 ] as const;
 ```
 
 Evaluation order:
 
-1. All policies run.
+1. Policies relevant to the entity type, resource type, and action run.
 2. Any matching deny wins.
 3. Otherwise any matching allow wins.
 4. Otherwise the result is denied.
+
+Unscoped policies are relevant to every check. In larger apps, scope policies so the engine can skip unrelated rules before running user code:
+
+```ts
+allow(
+  "owners can update projects",
+  { entityTypes: ["User"], resourceTypes: ["Project"], actions: ["update"] },
+  ({ entity, resource }) => entity.id === resource.data.ownerId,
+);
+
+deny(
+  "members cannot delete projects",
+  { entityTypes: ["User"], resourceTypes: ["Project"], actions: ["delete"] },
+  ({ entity }) => entity.role === "member",
+);
+```
+
+Scopes are static applicability metadata. Keep dynamic checks such as ownership, tenant membership, roles, and subscription state inside the policy function.
 
 ## Typed request context
 
@@ -100,8 +125,8 @@ Pass it to `createAuthor`:
 createAuthor({
   context: AuthContext,
   entities,
-  resources,
-  policies,
+  modules,
+  policies: globalPolicies,
 });
 ```
 
@@ -109,25 +134,33 @@ Now `ctx.context.tenantId` is typed as `string` in policies.
 
 ## Author instance
 
-Keep definitions, plans, and policies in separate files. Compose them once.
+Keep definitions, plans, modules, and policies in separate files. Compose them once.
 
 ```ts
-import { createAuthor } from "author-js";
-import { UserEntity, ProjectResource } from "./definitions";
+import { createAuthor, defineAuthorModule } from "author-js";
+import { UserEntity, ProjectResource, InvoiceResource } from "./definitions";
 import { entitlements } from "./plans";
 import { organizationPolicies } from "./policies/organization";
 import { projectPolicies } from "./policies/project";
 import { billingPolicies } from "./policies/billing";
 
+export const projectModule = defineAuthorModule({
+  name: "projects",
+  resources: { Project: ProjectResource },
+  policies: projectPolicies,
+});
+
+export const billingModule = defineAuthorModule({
+  name: "billing",
+  resources: { Invoice: InvoiceResource },
+  policies: billingPolicies,
+});
+
 export const author = createAuthor({
   entities: { User: UserEntity },
-  resources: { Project: ProjectResource },
+  modules: [projectModule, billingModule],
   entitlements,
-  policies: [
-    ...organizationPolicies,
-    ...projectPolicies,
-    ...billingPolicies,
-  ],
+  policies: organizationPolicies,
 });
 ```
 
@@ -138,11 +171,46 @@ src/authorization/
   author.ts
   definitions.ts
   plans.ts
+  modules/
+    projects.ts
+    billing.ts
   policies/
     organization.ts
-    project.ts
-    billing.ts
 ```
+
+## Author modules
+
+Use modules to group resource definitions and policies by domain while still building one authorization engine. This keeps global denies and audit behavior centralized.
+
+```ts
+import { defineAuthorModule } from "author-js";
+
+export const projectModule = defineAuthorModule({
+  name: "projects",
+  resources: { Project: ProjectResource },
+  policies: projectPolicies,
+});
+
+export const billingModule = defineAuthorModule({
+  name: "billing",
+  resources: { Invoice: InvoiceResource },
+  policies: billingPolicies,
+});
+```
+
+Compose modules once:
+
+```ts
+export const author = createAuthor({
+  entities: { User: UserEntity, ApiKey: ApiKeyEntity },
+  modules: [projectModule, billingModule],
+  policies: globalPolicies,
+});
+```
+
+Module resources and policies are merged into one runtime index. If two modules register the same resource type, `createAuthor` throws `DuplicateResourceTypeError`.
+
+For small apps, `createAuthor({ resources, policies })` is still valid. Modules are the preferred API when resources and policies are owned by different domains.
 
 ## Check API
 
@@ -150,6 +218,20 @@ Boolean result:
 
 ```ts
 const allowed = await author.as("User", user).can("update").on("Project", project);
+```
+
+Direct boolean check:
+
+```ts
+const allowed = await author.check({
+  entityType: "User",
+  entity: user,
+  action: "update",
+  resourceType: "Project",
+  resource: project,
+  context: {},
+  mode: "backend",
+});
 ```
 
 Detailed decision:

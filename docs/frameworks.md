@@ -168,7 +168,7 @@ Pass values policies need but resources do not contain.
 requireCan({
   author,
   entityType: "User",
-    entity: (req) => req.user,
+  entity: (req) => req.user,
   action: "create",
   resourceType: "Project",
   resource: (req) => req.organization,

@@ -6,7 +6,7 @@
 
 TypeScript-first authorization for SaaS apps, APIs, and React UIs.
 
-Write authorization as normal TypeScript policies:
+Write authorization as normal TypeScript policies, grouped into modules when your app grows:
 
 ```ts
 const allowed = await author.as("User", user).can("update").on("Project", project);
@@ -29,7 +29,7 @@ bun add pg react
 ## Quick start
 
 ```ts
-import { allow, createAuthor, defineEntity, defineResource } from "author-js";
+import { allow, createAuthor, defineAuthorModule, defineEntity, defineResource } from "author-js";
 
 type User = { id: string; role: "admin" | "member" };
 type Project = { id: string; ownerId: string };
@@ -45,20 +45,32 @@ const ProjectResource = defineResource<Project>()({
   actions: ["read", "update", "delete"] as const,
 });
 
-export const author = createAuthor({
-  entities: { User: UserEntity },
+const projectModule = defineAuthorModule({
+  name: "projects",
   resources: { Project: ProjectResource },
   policies: [
-    allow("admins can do anything", ({ entity }) => entity.role === "admin"),
-    allow("owners can update projects", ({ entity, resource, action }) => {
-      if (resource.type !== "Project") return false;
-      return action === "update" && entity.id === resource.data.ownerId;
-    }),
+    allow(
+      "admins can do anything",
+      { entityTypes: ["User"], resourceTypes: ["Project"], actions: ["read", "update", "delete"] },
+      ({ entity }) => entity.role === "admin",
+    ),
+    allow(
+      "owners can update projects",
+      { entityTypes: ["User"], resourceTypes: ["Project"], actions: ["update"] },
+      ({ entity, resource }) => entity.id === resource.data.ownerId,
+    ),
   ],
+});
+
+export const author = createAuthor({
+  entities: { User: UserEntity },
+  modules: [projectModule],
 });
 
 await author.as("User", user).can("update").on("Project", project).throw();
 ```
+
+Policy scopes are static applicability metadata. The engine uses them to select only policies relevant to the current entity type, resource type, and action.
 
 ## Permission management
 
@@ -114,7 +126,7 @@ Full docs: [docs/README.md](./docs/README.md)
 
 | Guide | Topics |
 | --- | --- |
-| [Core](./docs/core.md) | Entities, resources, policies, plans, parent checks, project layout |
+| [Core](./docs/core.md) | Entities, resources, modules, scoped policies, plans, parent checks |
 | [Permission management](./docs/management.md) | Grant, revoke, and list roles, permissions, and relations |
 | [Adapters](./docs/adapters.md) | Memory, PostgreSQL, MongoDB, Redis caching |
 | [React](./docs/react.md) | `AuthorProvider`, `Can`, `Cannot`, hooks |

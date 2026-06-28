@@ -99,17 +99,39 @@ export type PolicyChecker<Ctx> = {
   bivarianceHack(ctx: Ctx): boolean | PolicyResult | Promise<boolean | PolicyResult>;
 }["bivarianceHack"];
 
+/** Static policy applicability used to preselect relevant policies before running checks. */
+export type PolicyScope = {
+  /** Actor/entity types this policy can apply to. Omit to allow every entity type. */
+  entityTypes?: readonly string[];
+  /** Resource types this policy can apply to. Omit to allow every resource type. */
+  resourceTypes?: readonly string[];
+  /** Actions this policy can apply to. Omit to allow every action on matching resources. */
+  actions?: readonly string[];
+};
+
 /** Named allow/deny rule evaluated by the authorization engine. */
-export type Policy<Ctx> = { name: string; effect: PolicyEffect; check: PolicyChecker<Ctx> };
+export type Policy<Ctx> = { name: string; effect: PolicyEffect; check: PolicyChecker<Ctx>; scope?: PolicyScope };
 
 /** Creates an allow policy. A `true` checker result becomes an allow decision reasoned by `name`. */
-export function allow<Ctx>(name: string, check: PolicyChecker<Ctx>): Policy<Ctx> {
-  return { name, effect: "allow", check };
+export function allow<Ctx>(name: string, check: PolicyChecker<Ctx>): Policy<Ctx>;
+export function allow<Ctx>(name: string, scope: PolicyScope, check: PolicyChecker<Ctx>): Policy<Ctx>;
+export function allow<Ctx>(
+  name: string,
+  scopeOrCheck: PolicyScope | PolicyChecker<Ctx>,
+  check?: PolicyChecker<Ctx>,
+): Policy<Ctx> {
+  return createPolicy(name, "allow", parsePolicyInput(scopeOrCheck, check));
 }
 
 /** Creates a deny policy. Deny policies override all allow policies. */
-export function deny<Ctx>(name: string, check: PolicyChecker<Ctx>): Policy<Ctx> {
-  return { name, effect: "deny", check };
+export function deny<Ctx>(name: string, check: PolicyChecker<Ctx>): Policy<Ctx>;
+export function deny<Ctx>(name: string, scope: PolicyScope, check: PolicyChecker<Ctx>): Policy<Ctx>;
+export function deny<Ctx>(
+  name: string,
+  scopeOrCheck: PolicyScope | PolicyChecker<Ctx>,
+  check?: PolicyChecker<Ctx>,
+): Policy<Ctx> {
+  return createPolicy(name, "deny", parsePolicyInput(scopeOrCheck, check));
 }
 
 /** Explicitly skips a policy with an optional explanation for `Decision.skippedPolicies`. */
@@ -123,4 +145,20 @@ export function normalizePolicyResult<Ctx>(policy: Policy<Ctx>, result: boolean 
     return result ? { effect: policy.effect, reason: policy.name } : { effect: "skip" };
   }
   return result;
+}
+
+type ParsedPolicyInput<Ctx> = { check: PolicyChecker<Ctx>; scope?: PolicyScope };
+
+function parsePolicyInput<Ctx>(
+  scopeOrCheck: PolicyScope | PolicyChecker<Ctx>,
+  check: PolicyChecker<Ctx> | undefined,
+): ParsedPolicyInput<Ctx> {
+  if (typeof scopeOrCheck === "function") return { check: scopeOrCheck };
+  if (check) return { check, scope: scopeOrCheck };
+  throw new TypeError("Policy check is required");
+}
+
+function createPolicy<Ctx>(name: string, effect: PolicyEffect, input: ParsedPolicyInput<Ctx>): Policy<Ctx> {
+  if (input.scope) return { name, effect, check: input.check, scope: input.scope };
+  return { name, effect, check: input.check };
 }

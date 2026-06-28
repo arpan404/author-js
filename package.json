@@ -1,6 +1,6 @@
 {
   "name": "author-js",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TypeScript-first authorization for frontend and backend apps.",
   "type": "module",
   "module": "dist/index.js",
@@ -22,6 +22,8 @@
     "fmt:check": "biome format .",
     "lint": "biome lint .",
     "check": "bun run typecheck && bun test && bun run build",
+    "bench": "bun run benchmarks/policy-scaling.bench.ts",
+    "bench:policy": "bun run benchmarks/policy-scaling.bench.ts",
     "prepare": "husky",
     "prepack": "bun run check"
   },
@@ -128,6 +130,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "redis": "^6.0.1",
+    "tinybench": "^6.0.2",
     "typescript": "^5"
   }
 }
