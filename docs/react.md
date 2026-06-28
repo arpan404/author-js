@@ -23,7 +23,16 @@ Props:
 | `authorization` | Author JS instance |
 | `entity` | default actor for child checks |
 | `mode` | defaults to `frontend` |
+| `context` | default context passed to child checks |
 | `children` | React children |
+
+Provider context is useful for values every check needs, such as tenant ID or rollout bucket:
+
+```tsx
+<AuthorProvider authorization={author} entity={user} context={{ tenantId }}>
+  <App />
+</AuthorProvider>
+```
 
 ## Can
 
@@ -109,7 +118,7 @@ Use `i` when a check should run for a different actor than the provider default.
 
 ## Context
 
-Pass request or UI context to policies.
+Pass request or UI context to policies. Component context is merged with provider context and overrides matching keys.
 
 ```tsx
 <Can

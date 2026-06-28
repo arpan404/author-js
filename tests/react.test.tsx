@@ -69,6 +69,21 @@ describe("react adapter", () => {
     expect(container?.textContent).toBe("cannot");
   });
 
+  test("provider context is passed and per-check context overrides it", async () => {
+    setupDom();
+    const seen: unknown[] = [];
+
+    await render(
+      <AuthorProvider authorization={{ evaluate: async (input) => { seen.push(input.context); return allowedDecision; } }} entity={{ id: "u1" }} context={{ tenantId: "tenant_1", source: "provider" }}>
+        <Can do="read" on="Project" resource={{ id: "p1" }} context={{ source: "component" }}>
+          <span>allowed</span>
+        </Can>
+      </AuthorProvider>,
+    );
+
+    expect(seen.at(-1)).toEqual({ tenantId: "tenant_1", source: "component" });
+  });
+
   test("useCan exposes loading and decision state", async () => {
     setupDom();
     const states: Array<{ loading: boolean; allowed: boolean; reason: string | null }> = [];

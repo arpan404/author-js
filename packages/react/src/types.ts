@@ -22,6 +22,8 @@ export type AuthorProviderProps = {
   entity?: unknown;
   /** Evaluation mode. Defaults to `frontend`; frontend checks are UX only. */
   mode?: Mode;
+  /** Default context passed to every child check. Per-check context overrides matching keys. */
+  context?: Record<string, unknown>;
   children: ReactNode;
 };
 
@@ -30,6 +32,7 @@ export type AuthorContextValue = {
   authorization: ReactAuthor;
   entity?: unknown;
   mode: Mode;
+  context: Record<string, unknown>;
 };
 
 /** Input accepted by `useCan`, `useCannot`, `Can`, and `Cannot`. */

@@ -11,8 +11,9 @@ export function useCan(input: UseCanInput): UseCanResult {
   const author = useOptionalAuthor();
   const entity = input.i ?? author?.entity;
   const [state, setState] = useState<UseCanResult>({ allowed: false, loading: true, error: null, decision: null });
+  const mergedContext = { ...(author?.context ?? {}), ...(input.context ?? {}) };
   const resourceKey = stableKey(input.resource);
-  const contextKey = stableKey(input.context ?? {});
+  const contextKey = stableKey(mergedContext);
 
   useEffect(() => {
     let active = true;
@@ -31,7 +32,7 @@ export function useCan(input: UseCanInput): UseCanResult {
       action: input.do,
       resourceType: input.on,
       resource: input.resource,
-      context: input.context ?? {},
+      context: mergedContext,
       mode: author.mode,
     }).then((decision) => {
       if (active) setState(fromDecision(decision));
