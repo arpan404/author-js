@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { MongoClient } from "mongodb";
+import type { MongoClient } from "mongodb";
 import { Pool } from "pg";
 import { createClient, type RedisClientType } from "redis";
 import { mongodbStore, ensureMongoIndexes } from "../packages/mongodb/src/index";
@@ -21,7 +21,7 @@ let redis: RedisClientType;
 integration("real adapter integrations", () => {
   beforeAll(async () => {
     pg = new Pool({ connectionString: pgUrl });
-    mongo = new MongoClient(mongoUrl);
+    mongo = await createMongoClient(mongoUrl);
     redis = createClient({ url: redisUrl });
 
     await Promise.all([mongo.connect(), redis.connect()]);
@@ -133,6 +133,42 @@ integration("real adapter integrations", () => {
     await expect(cache.get("ttl-key")).resolves.toBeNull();
   });
 });
+
+async function createMongoClient(url: string): Promise<MongoClient> {
+  patchBunV8SnapshotProbe();
+  const { MongoClient } = await import("mongodb");
+  return new MongoClient(url);
+}
+
+let bunV8SnapshotProbePatched = false;
+
+function patchBunV8SnapshotProbe(): void {
+  if (bunV8SnapshotProbePatched) return;
+  bunV8SnapshotProbePatched = true;
+
+  const getBuiltinModule = Reflect.get(process, "getBuiltinModule");
+  if (typeof getBuiltinModule !== "function") return;
+
+  const patchedGetBuiltinModule = (name: string): unknown => {
+    const module: unknown = Reflect.apply(getBuiltinModule, process, [name]);
+    if (name !== "v8" || !isRecord(module)) return module;
+
+    const startupSnapshot = isRecord(module.startupSnapshot) ? module.startupSnapshot : {};
+    return {
+      ...module,
+      startupSnapshot: {
+        ...startupSnapshot,
+        isBuildingSnapshot: () => false,
+      },
+    };
+  };
+
+  Reflect.set(process, "getBuiltinModule", patchedGetBuiltinModule);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 async function setupPostgres(pool: Pool): Promise<void> {
   await pool.query(`
