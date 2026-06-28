@@ -1,0 +1,29 @@
+name: Bug report
+description: Report something that is broken
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the bug clearly.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Minimal code or repo link.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Author JS version
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Bun/Node version, OS, framework, database adapter.
