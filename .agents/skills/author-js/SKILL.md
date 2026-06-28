@@ -5,7 +5,7 @@ description: Self-contained guide for AI agents building app authorization with 
 
 # author.js app builder skill
 
-This skill is enough to build on top of author.js without reading the framework source.
+This skill is enough to build application authorization with author.js from the public API alone.
 
 author.js is a TypeScript-first authorization library. Apps define:
 
@@ -20,7 +20,7 @@ Backend checks are security. React checks are only UI convenience.
 
 ## Docs fallback
 
-Do not read framework source unless the user asks. If API details are uncertain, use these docs:
+Use this skill first. If API details are uncertain, use these public docs:
 
 - Overview: https://github.com/arpan404/author-js#readme
 - Core: https://github.com/arpan404/author-js/blob/main/docs/core.md
