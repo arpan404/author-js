@@ -125,7 +125,7 @@
     "@types/react-dom": "^19.2.3",
     "happy-dom": "^20.10.6",
     "husky": "^9.1.7",
-    "mongodb": "6",
+    "mongodb": "7",
     "pg": "^8.22.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
