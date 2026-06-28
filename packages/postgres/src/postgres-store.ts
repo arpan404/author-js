@@ -1,3 +1,4 @@
+import { Pool } from "pg";
 import type { AuditEntry, AuthorStore, DeleteRelationInput, GetPermissionsInput, GetRelationsInput, GetRolesInput, PermissionGrant, PermissionGrantInput, PolicyEffect, RelationTuple, RelationTupleInput, RevokePermissionInput, RevokeRoleInput, RoleGrant, RoleGrantInput } from "../../core/src/index";
 
 export type PostgresClient = {
@@ -7,8 +8,7 @@ export type PostgresClient = {
 export type PostgresStoreInput = { client: PostgresClient } | { connectionString: string };
 
 export function postgresStore(input: PostgresStoreInput): AuthorStore {
-  if (!("client" in input)) throw new Error("postgresStore({ connectionString }) needs a pg-compatible client; pass { client } in v1");
-  const db = input.client;
+  const db: PostgresClient = "client" in input ? input.client : new Pool({ connectionString: input.connectionString });
   return {
     getRoles: (query) => getRoles(db, query),
     grantRole: (role) => exec(db, `INSERT INTO author_roles (id, entity_type, entity_id, role, scope_type, scope_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`, [crypto.randomUUID(), role.entityType, role.entityId, role.role, role.scopeType ?? null, role.scopeId ?? null, new Date()]),
