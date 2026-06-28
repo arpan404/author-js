@@ -1,7 +1,7 @@
 {
   "name": "author-js",
   "version": "0.2.0",
-  "description": "TypeScript-first authorization for frontend and backend apps.",
+  "description": "Authorization engine for scoped policies, RBAC, ABAC, ReBAC, audit logging, and framework integrations.",
   "type": "module",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",

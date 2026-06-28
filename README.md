@@ -4,7 +4,7 @@
 [![npm](https://img.shields.io/npm/v/author-js.svg)](https://www.npmjs.com/package/author-js)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-TypeScript-first authorization for SaaS apps, APIs, and React UIs.
+Authorization engine for scoped policies, RBAC, ABAC, ReBAC, audit logging, and framework integrations.
 
 Write authorization as normal TypeScript policies, grouped into modules when your app grows:
 
