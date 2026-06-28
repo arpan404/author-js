@@ -9,7 +9,7 @@ TypeScript-first authorization for SaaS apps, APIs, and React UIs.
 Write authorization as normal TypeScript policies:
 
 ```ts
-const allowed = await author.as(user).can("update").on("Project", project);
+const allowed = await author.as("User", user).can("update").on("Project", project);
 ```
 
 Supports RBAC, ABAC, ReBAC, parent-resource checks, subscription features, limits, UI rendering, and backend enforcement.
@@ -57,7 +57,7 @@ export const author = createAuthor({
   ],
 });
 
-await author.as(user).can("update").on("Project", project).throw();
+await author.as("User", user).can("update").on("Project", project).throw();
 ```
 
 ## Packages

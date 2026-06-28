@@ -25,12 +25,12 @@ describe("cache", () => {
       policies: [allow("cached", () => { calls += 1; return true; })],
     });
 
-    expect(await author.as({ id: "u1" }).can("read").on("Project", { id: "p1", ownerId: "u1" })).toBe(true);
-    expect(await author.as({ id: "u1" }).can("read").on("Project", { id: "p1", ownerId: "u1" })).toBe(true);
+    expect(await author.as("User", { id: "u1" }).can("read").on("Project", { id: "p1", ownerId: "u1" })).toBe(true);
+    expect(await author.as("User", { id: "u1" }).can("read").on("Project", { id: "p1", ownerId: "u1" })).toBe(true);
     expect(calls).toBe(1);
 
     await author.invalidate();
-    expect(await author.as({ id: "u1" }).can("read").on("Project", { id: "p1", ownerId: "u1" })).toBe(true);
+    expect(await author.as("User", { id: "u1" }).can("read").on("Project", { id: "p1", ownerId: "u1" })).toBe(true);
     expect(calls).toBe(2);
   });
 

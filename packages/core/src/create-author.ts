@@ -1,5 +1,5 @@
 import { decisionCacheKey, type AuthorCache } from "./cache.js";
-import type { EntityDefinition, ResourceDefinition } from "./definitions.js";
+import type { ContextDefinition, EntityDefinition, ResourceDefinition } from "./definitions.js";
 import type { EntitlementContext, EntitlementsConfig } from "./entitlements.js";
 import { AuthorizationDeniedError, MissingParentResourceError, UnknownActionError, UnknownEntityTypeError, UnknownResourceTypeError } from "./errors.js";
 import { normalizePolicyResult, type AuthorPolicyContext, type Policy } from "./policy.js";
@@ -11,6 +11,8 @@ type ResourceMap = Record<string, ResourceDefinition<unknown, string, readonly s
 type EntityValue<Entities> = Entities[keyof Entities] extends EntityDefinition<infer Entity, string> ? Entity : never;
 type ResourceValue<Resources, Type extends keyof Resources> = Resources[Type] extends ResourceDefinition<infer Resource, string, readonly string[]> ? Resource : never;
 type ResourceAction<Resources> = Resources[keyof Resources] extends ResourceDefinition<unknown, string, infer Actions> ? Actions[number] : string;
+type SubjectValue<Entities, Type extends keyof Entities> = Entities[Type] extends EntityDefinition<infer Entity, string> ? Entity : never;
+type SubjectUnion<Entities> = { [Type in keyof Entities & string]: { type: Type; id: string; data: SubjectValue<Entities, Type> } }[keyof Entities & string];
 type TypedResource<Resources, Type extends keyof Resources & string> = ResourceValue<Resources, Type> & { readonly authorType: Type };
 type ResourceOn<Resources, CustomContext extends Record<string, unknown>> = {
   <Type extends keyof Resources & string>(resourceType: Type, resource: ResourceValue<Resources, Type>, context?: CustomContext): ResourceDecisionBuilder;
@@ -19,13 +21,15 @@ type ResourceOn<Resources, CustomContext extends Record<string, unknown>> = {
 type PolicyContext<Entities, Resources, CustomContext extends Record<string, unknown>> = AuthorPolicyContext<
   EntityValue<Entities>,
   ResourceValue<Resources, keyof Resources>,
-  CustomContext
+  CustomContext,
+  SubjectUnion<Entities>
 >;
 
 /** Configuration for `createAuthor`. */
 export type CreateAuthorInput<Entities, Resources, CustomContext extends Record<string, unknown>> = {
   entities: Entities;
   resources: Resources;
+  context?: ContextDefinition<CustomContext>;
   policies: readonly Policy<PolicyContext<Entities, Resources, CustomContext>>[];
   store?: AuthorStore;
   mode?: Mode;
@@ -38,7 +42,8 @@ export type CreateAuthorInput<Entities, Resources, CustomContext extends Record<
 };
 
 type EvaluateInput<CustomContext extends Record<string, unknown>> = {
-  entity: unknown;
+  entityType: string;
+    entity: unknown;
   action: string;
   resourceType: string;
   resource: unknown;
@@ -56,7 +61,7 @@ export type ResourceDecisionBuilder = PromiseLike<boolean> & {
 
 /** Authorization engine instance created by `createAuthor`. */
 export type AuthorInstance<Entities, Resources, CustomContext extends Record<string, unknown>> = {
-  as(entity: EntityValue<Entities>): {
+  as<Type extends keyof Entities & string>(entityType: Type, entity: SubjectValue<Entities, Type>): {
     can<Action extends ResourceAction<Resources>>(action: Action): { on: ResourceOn<Resources, CustomContext> };
     cannot<Action extends ResourceAction<Resources>>(action: Action): { on: ResourceOn<Resources, CustomContext> };
   };
@@ -83,8 +88,8 @@ export function createAuthor<
 
   async function evaluate(request: EvaluateInput<CustomContext>): Promise<Decision> {
     const startedAt = performance.now();
-    const entityDefinition = firstValue(input.entities);
-    if (!entityDefinition) throw new UnknownEntityTypeError("<none>");
+    const entityDefinition = input.entities[request.entityType];
+    if (!entityDefinition) throw new UnknownEntityTypeError(request.entityType);
 
     const resourceDefinition = input.resources[request.resourceType];
     if (!resourceDefinition) throw new UnknownResourceTypeError(request.resourceType);
@@ -93,7 +98,7 @@ export function createAuthor<
     const entityId = entityDefinition.id(request.entity);
     const resourceId = resourceDefinition.id(request.resource);
     const cacheKey = input.cache ? await decisionCacheKey({
-      entityType: entityDefinition.type,
+      entityType: request.entityType,
       entityId,
       action: request.action,
       resourceType: request.resourceType,
@@ -115,7 +120,7 @@ export function createAuthor<
       context: request.context,
       mode: request.mode,
       store,
-      entityType: entityDefinition.type,
+      entityType: request.entityType,
       entityId,
       resourceDefinition,
       entitlements: input.entitlements,
@@ -139,7 +144,7 @@ export function createAuthor<
 
     const decision = makeDecision({
       action: request.action,
-      entityType: entityDefinition.type,
+      entityType: request.entityType,
       entityId,
       resourceType: request.resourceType,
       resourceId,
@@ -177,12 +182,12 @@ export function createAuthor<
       else await input.cache.clear?.();
     },
     evaluate,
-    as(entity) {
+    as(entityType, entity) {
       const chain = (negated: boolean) => (action: ResourceAction<Resources>) => ({
         on: ((first: string | TypedResource<Resources, keyof Resources & string>, second?: ResourceValue<Resources, keyof Resources> | CustomContext, third?: CustomContext) => {
           const parsed = parseResourceInput(first, second, third);
           const run = async () => {
-            const decision = await evaluate({ entity, action, resourceType: parsed.resourceType, resource: parsed.resource, context: parsed.context, mode });
+            const decision = await evaluate({ entityType, entity, action, resourceType: parsed.resourceType, resource: parsed.resource, context: parsed.context, mode });
             return negated ? invertDecision(decision) : decision;
           };
           return decisionBuilder(run);
@@ -191,10 +196,6 @@ export function createAuthor<
       return { can: chain(false), cannot: chain(true) };
     },
   };
-}
-
-function firstValue<T>(record: Record<string, T>): T | undefined {
-  return Object.values(record)[0];
 }
 
 function emptyContext<CustomContext extends Record<string, unknown>>(): CustomContext {
@@ -289,7 +290,10 @@ function buildContext<CustomContext extends Record<string, unknown>>(input: {
     entityId: input.entityId,
   });
   return {
+    subject: { type: input.entityType, id: input.entityId, data: input.entity },
     entity: input.entity,
+    entityType: input.entityType,
+    entityId: input.entityId,
     action: input.action,
     resource: { type: input.resourceType, id: input.resourceId, data: input.resource },
     context: input.context,

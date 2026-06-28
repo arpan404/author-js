@@ -7,7 +7,7 @@ Render UI based on authorization decisions. Pair with server-side enforcement fo
 ```tsx
 import { AuthorProvider } from "author-js/react";
 
-<AuthorProvider authorization={author} entity={user}>
+<AuthorProvider authorization={author} entityType="User" entity={user}>
   <App />
 </AuthorProvider>
 ```
@@ -23,7 +23,7 @@ import { AuthorProvider } from "author-js/react";
 Set shared context once at the provider:
 
 ```tsx
-<AuthorProvider authorization={author} entity={user} context={{ tenantId }}>
+<AuthorProvider authorization={author} entityType="User" entity={user} context={{ tenantId }}>
   <App />
 </AuthorProvider>
 ```

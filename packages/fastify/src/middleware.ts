@@ -2,13 +2,14 @@ import type { Decision } from "../../core/src/index.js";
 
 type MaybePromise<T> = T | Promise<T>;
 type AuthorLike = {
-  evaluate(input: { entity: unknown; action: string; resourceType: string; resource: unknown; context: Record<string, unknown>; mode: "backend" }): Promise<Decision>;
+  evaluate(input: { entityType: string; entity: unknown; action: string; resourceType: string; resource: unknown; context: Record<string, unknown>; mode: "backend" }): Promise<Decision>;
 };
 type ReplyLike = { code(status: number): { send(body: unknown): unknown } };
 
 /** Options for Fastify authorization pre-handlers. */
 export type FastifyRequireCanOptions<Req> = {
   author: AuthorLike;
+  entityType: string | ((request: Req) => MaybePromise<string>);
   entity(request: Req): MaybePromise<unknown>;
   action: string | ((request: Req) => MaybePromise<string>);
   resourceType: string | ((request: Req) => MaybePromise<string>);
@@ -19,14 +20,15 @@ export type FastifyRequireCanOptions<Req> = {
 /** Creates a Fastify-compatible pre-handler that sends 403 when denied. */
 export function requireCan<Req, Reply extends ReplyLike = ReplyLike>(options: FastifyRequireCanOptions<Req>) {
   return async (request: Req, reply: Reply): Promise<void> => {
-    const [entity, action, resourceType, resource, context] = await Promise.all([
+    const [entityType, entity, action, resourceType, resource, context] = await Promise.all([
+      value(options.entityType, request),
       options.entity(request),
       value(options.action, request),
       value(options.resourceType, request),
       options.resource(request),
       options.context?.(request) ?? {},
     ]);
-    const decision = await options.author.evaluate({ entity, action, resourceType, resource, context, mode: "backend" });
+    const decision = await options.author.evaluate({ entityType, entity, action, resourceType, resource, context, mode: "backend" });
     if (!decision.allowed) reply.code(403).send({ error: "Forbidden", reason: decision.reason });
   };
 }

@@ -7,7 +7,7 @@ Can this entity perform this action on this resource in this context?
 ```
 
 ```ts
-await author.as(user).can("update").on("Project", project);
+await author.as("User", user).can("update").on("Project", project);
 ```
 
 ## Entities and resources
@@ -79,7 +79,35 @@ Evaluation order:
 3. Otherwise any matching allow wins.
 4. Otherwise the result is denied.
 
-## author instance
+## Typed request context
+
+Use `defineContext` when policies need typed request context.
+
+```ts
+import { defineContext } from "author-js";
+
+type AuthContext = {
+  tenantId: string;
+  projectCount?: number;
+};
+
+export const AuthContext = defineContext<AuthContext>();
+```
+
+Pass it to `createAuthor`:
+
+```ts
+createAuthor({
+  context: AuthContext,
+  entities,
+  resources,
+  policies,
+});
+```
+
+Now `ctx.context.tenantId` is typed as `string` in policies.
+
+## Author instance
 
 Keep definitions, plans, and policies in separate files. Compose them once.
 
@@ -121,14 +149,14 @@ src/authorization/
 Boolean result:
 
 ```ts
-const allowed = await author.as(user).can("update").on("Project", project);
+const allowed = await author.as("User", user).can("update").on("Project", project);
 ```
 
 Detailed decision:
 
 ```ts
 const decision = await author
-  .as(user)
+  .as("User", user)
   .can("update")
   .on("Project", project)
   .explain();
@@ -137,7 +165,7 @@ const decision = await author
 Enforcement:
 
 ```ts
-await author.as(user).can("delete").on("Project", project).throw();
+await author.as("User", user).can("delete").on("Project", project).throw();
 ```
 
 `.throw()` raises `AuthorizationDeniedError` when denied.
@@ -147,7 +175,7 @@ await author.as(user).can("delete").on("Project", project).throw();
 Pass request-specific data that policies need but resources do not contain: IP address, tenant ID, usage counts, feature flags.
 
 ```ts
-await author.as(user).can("create").on("Project", project, {
+await author.as("User", user).can("create").on("Project", project, {
   ip: request.ip,
   projectCount: await countProjects(user.id),
 });

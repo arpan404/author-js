@@ -5,6 +5,7 @@ import type { Decision, Mode } from "../../core/src/index.js";
 export type ReactAuthor = {
   /** Evaluates one authorization request. */
   evaluate(input: {
+    entityType: string;
     entity: unknown;
     action: string;
     resourceType: string;
@@ -18,6 +19,8 @@ export type ReactAuthor = {
 export type AuthorProviderProps = {
   /** Authorization engine used by hooks and components. */
   authorization: ReactAuthor;
+  /** Default entity type for child checks. */
+  entityType: string;
   /** Default entity for child checks. Can be overridden with `i`. */
   entity?: unknown;
   /** Evaluation mode. Defaults to `frontend`; frontend checks are UX only. */
@@ -30,6 +33,7 @@ export type AuthorProviderProps = {
 /** Value stored in React context by `AuthorProvider`. */
 export type AuthorContextValue = {
   authorization: ReactAuthor;
+  entityType: string;
   entity?: unknown;
   mode: Mode;
   context: Record<string, unknown>;
@@ -37,6 +41,8 @@ export type AuthorContextValue = {
 
 /** Input accepted by `useCan`, `useCannot`, `Can`, and `Cannot`. */
 export type UseCanInput = {
+  /** Optional entity type override. Defaults to provider entityType. */
+  iType?: string;
   /** Optional entity override. Defaults to provider entity. */
   i?: unknown;
   /** Action to check, for example `update`. */

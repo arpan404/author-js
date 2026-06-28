@@ -9,6 +9,7 @@ const missingEntity = new Error("Author entity is required");
 /** Runs an async `can` check and returns loading, error, boolean, and decision state. */
 export function useCan(input: UseCanInput): UseCanResult {
   const author = useOptionalAuthor();
+  const entityType = input.iType ?? author?.entityType;
   const entity = input.i ?? author?.entity;
   const [state, setState] = useState<UseCanResult>({ allowed: false, loading: true, error: null, decision: null });
   const mergedContext = { ...(author?.context ?? {}), ...(input.context ?? {}) };
@@ -21,13 +22,14 @@ export function useCan(input: UseCanInput): UseCanResult {
       setState({ allowed: false, loading: false, error: missingProvider, decision: null });
       return () => { active = false; };
     }
-    if (entity === undefined) {
+    if (entityType === undefined || entity === undefined) {
       setState({ allowed: false, loading: false, error: missingEntity, decision: null });
       return () => { active = false; };
     }
 
     setState((previous) => ({ ...previous, loading: true, error: null }));
     author.authorization.evaluate({
+      entityType,
       entity,
       action: input.do,
       resourceType: input.on,
@@ -41,7 +43,7 @@ export function useCan(input: UseCanInput): UseCanResult {
     });
 
     return () => { active = false; };
-  }, [author, entity, input.do, input.on, resourceKey, contextKey]);
+  }, [author, entityType, entity, input.do, input.on, resourceKey, contextKey]);
 
   return state;
 }

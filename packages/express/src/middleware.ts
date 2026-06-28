@@ -3,6 +3,7 @@ import type { Decision } from "../../core/src/index.js";
 type MaybePromise<T> = T | Promise<T>;
 type AuthorLike = {
   evaluate(input: {
+    entityType: string;
     entity: unknown;
     action: string;
     resourceType: string;
@@ -21,6 +22,7 @@ type Next = (error?: unknown) => void;
 /** Options for Express-style authorization middleware. */
 export type RequireCanOptions<Req> = {
   author: AuthorLike;
+  entityType: string | ((req: Req) => MaybePromise<string>);
   entity(req: Req): MaybePromise<unknown>;
   action: string | ((req: Req) => MaybePromise<string>);
   resourceType: string | ((req: Req) => MaybePromise<string>);
@@ -32,14 +34,15 @@ export type RequireCanOptions<Req> = {
 export function requireCan<Req, Res extends ResponseLike = ResponseLike>(options: RequireCanOptions<Req>) {
   return async (req: Req, res: Res, next: Next): Promise<void> => {
     try {
-      const [entity, action, resourceType, resource, context] = await Promise.all([
+      const [entityType, entity, action, resourceType, resource, context] = await Promise.all([
+        value(options.entityType, req),
         options.entity(req),
         value(options.action, req),
         value(options.resourceType, req),
         options.resource(req),
         options.context?.(req) ?? {},
       ]);
-      const decision = await options.author.evaluate({ entity, action, resourceType, resource, context, mode: "backend" });
+      const decision = await options.author.evaluate({ entityType, entity, action, resourceType, resource, context, mode: "backend" });
       if (decision.allowed) next();
       else res.status(403).json({ error: "Forbidden", reason: decision.reason });
     } catch (error) {

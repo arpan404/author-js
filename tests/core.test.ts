@@ -50,25 +50,25 @@ const typedProject = { authorType: "Project", id: "project_1", ownerId: "user_1"
 
 describe("core", () => {
   test("first demo allows owner update", async () => {
-    await expect(testAuthor().as(member).can("update").on("Project", project).allowed()).resolves.toBe(true);
-    await expect(testAuthor().as(member).can("update").on(typedProject).allowed()).resolves.toBe(true);
-    expect(await testAuthor().as(member).can("update").on(typedProject)).toBe(true);
+    await expect(testAuthor().as("User", member).can("update").on("Project", project).allowed()).resolves.toBe(true);
+    await expect(testAuthor().as("User", member).can("update").on(typedProject).allowed()).resolves.toBe(true);
+    expect(await testAuthor().as("User", member).can("update").on(typedProject)).toBe(true);
   });
 
   test("denies when no policy matches", async () => {
-    await expect(testAuthor().as(member).can("read").on("Project", project).allowed()).resolves.toBe(false);
+    await expect(testAuthor().as("User", member).can("read").on("Project", project).allowed()).resolves.toBe(false);
   });
 
   test("deny overrides allow", async () => {
-    await expect(testAuthor().as(admin).can("delete").on("Project", project).allowed()).resolves.toBe(true);
-    await expect(testAuthor().as(member).can("delete").on("Project", project).allowed()).resolves.toBe(false);
+    await expect(testAuthor().as("User", admin).can("delete").on("Project", project).allowed()).resolves.toBe(true);
+    await expect(testAuthor().as("User", member).can("delete").on("Project", project).allowed()).resolves.toBe(false);
   });
 
   test("explain and throw", async () => {
-    const decision = await testAuthor().as(member).can("update").on("Project", project).explain();
+    const decision = await testAuthor().as("User", member).can("update").on("Project", project).explain();
     expect(decision.allowed).toBe(true);
     expect(decision.matchedPolicies.map((policy) => policy.name)).toContain("owner can update project");
-    await expect(testAuthor().as(member).can("read").on("Project", project).throw()).rejects.toBeInstanceOf(AuthorizationDeniedError);
+    await expect(testAuthor().as("User", member).can("read").on("Project", project).throw()).rejects.toBeInstanceOf(AuthorizationDeniedError);
   });
 
   test("memory roles relations permissions and parents", async () => {
@@ -82,10 +82,10 @@ describe("core", () => {
     await store.grantPermission({ entityType: "User", entityId: member.id, action: "read", resourceType: "Organization", resourceId: "org_1", effect: "allow" });
     await store.createRelation({ subjectType: "User", subjectId: member.id, relation: "member", objectType: "Organization", objectId: "org_1" });
 
-    await expect(author.as(member).can("read").on("Project", project).allowed()).resolves.toBe(true);
-    await expect(author.as(member).can("delete").on("Project", project).allowed()).resolves.toBe(false);
-    await expect(author.as({ id: "other", role: "member" }).can("update").on("Project", { ...project, ownerId: "nope" }).allowed()).resolves.toBe(true);
-    await expect(author.as({ id: "owner", role: "member" }).can("update").on("Project", { ...project, ownerId: "nope" }).allowed()).resolves.toBe(true);
+    await expect(author.as("User", member).can("read").on("Project", project).allowed()).resolves.toBe(true);
+    await expect(author.as("User", member).can("delete").on("Project", project).allowed()).resolves.toBe(false);
+    await expect(author.as("User", { id: "other", role: "member" }).can("update").on("Project", { ...project, ownerId: "nope" }).allowed()).resolves.toBe(true);
+    await expect(author.as("User", { id: "owner", role: "member" }).can("update").on("Project", { ...project, ownerId: "nope" }).allowed()).resolves.toBe(true);
   });
 
   test("parent permission deny overrides parent allow", async () => {
@@ -99,7 +99,7 @@ describe("core", () => {
     await store.grantPermission({ entityType: "User", entityId: member.id, action: "read", resourceType: "Organization", resourceId: "org_1", effect: "allow" });
     await store.grantPermission({ entityType: "User", entityId: member.id, action: "read", resourceType: "Organization", resourceId: "org_1", effect: "deny" });
 
-    await expect(author.as(member).can("read").on("Project", project).allowed()).resolves.toBe(false);
+    await expect(author.as("User", member).can("read").on("Project", project).allowed()).resolves.toBe(false);
   });
 
   test("parent getRequired throws for missing parent", async () => {
@@ -112,7 +112,7 @@ describe("core", () => {
       })],
     });
 
-    await expect(author.as(member).can("read").on("Project", project).explain()).rejects.toThrow("Missing parent resource: workspace");
+    await expect(author.as("User", member).can("read").on("Project", project).explain()).rejects.toThrow("Missing parent resource: workspace");
   });
 
   test("list helpers expose store grants and parent refs", async () => {
@@ -133,6 +133,6 @@ describe("core", () => {
     await store.createRelation({ subjectType: "User", subjectId: member.id, relation: "viewer", objectType: "Project", objectId: project.id });
     await store.grantPermission({ entityType: "User", entityId: member.id, action: "read", resourceType: "Project", resourceId: project.id, effect: "allow" });
 
-    await expect(author.as(member).can("read").on("Project", project).allowed()).resolves.toBe(true);
+    await expect(author.as("User", member).can("read").on("Project", project).allowed()).resolves.toBe(true);
   });
 });

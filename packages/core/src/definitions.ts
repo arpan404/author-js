@@ -61,6 +61,16 @@ export function defineEntity<T>() {
  *   actions: ["read", "update"] as const,
  * });
  */
+export type ContextDefinition<T extends Record<string, unknown>> = {
+  readonly kind: "context";
+  readonly type?: T;
+};
+
+/** Defines the custom context type used by policies. Runtime no-op, compile-time only. */
+export function defineContext<T extends Record<string, unknown>>(): ContextDefinition<T> {
+  return { kind: "context" };
+}
+
 export function defineResource<T>() {
   return function createResourceDefinition<
     const Type extends string,

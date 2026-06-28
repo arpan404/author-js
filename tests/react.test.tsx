@@ -35,7 +35,7 @@ describe("react adapter", () => {
     const author = { evaluate: async () => allowedDecision };
 
     await render(
-      <AuthorProvider authorization={author} entity={{ id: "u1" }}>
+      <AuthorProvider entityType="User" authorization={author} entity={{ id: "u1" }}>
         <Can do="read" on="Project" resource={{ id: "p1" }} fallback={<span>denied</span>}>
           <span>allowed</span>
         </Can>
@@ -45,7 +45,7 @@ describe("react adapter", () => {
     expect(container?.textContent).toBe("allowed");
 
     await render(
-      <AuthorProvider authorization={{ evaluate: async () => deniedDecision }} entity={{ id: "u1" }}>
+      <AuthorProvider entityType="User" authorization={{ evaluate: async () => deniedDecision }} entity={{ id: "u1" }}>
         <Can do="read" on="Project" resource={{ id: "p1" }} fallback={<span>denied</span>}>
           <span>allowed</span>
         </Can>
@@ -59,7 +59,7 @@ describe("react adapter", () => {
     setupDom();
 
     await render(
-      <AuthorProvider authorization={{ evaluate: async () => deniedDecision }} entity={{ id: "u1" }}>
+      <AuthorProvider entityType="User" authorization={{ evaluate: async () => deniedDecision }} entity={{ id: "u1" }}>
         <Cannot do="delete" on="Project" resource={{ id: "p1" }}>
           <span>cannot</span>
         </Cannot>
@@ -74,7 +74,7 @@ describe("react adapter", () => {
     const seen: unknown[] = [];
 
     await render(
-      <AuthorProvider authorization={{ evaluate: async (input) => { seen.push(input.context); return allowedDecision; } }} entity={{ id: "u1" }} context={{ tenantId: "tenant_1", source: "provider" }}>
+      <AuthorProvider entityType="User" authorization={{ evaluate: async (input) => { seen.push(input.context); return allowedDecision; } }} entity={{ id: "u1" }} context={{ tenantId: "tenant_1", source: "provider" }}>
         <Can do="read" on="Project" resource={{ id: "p1" }} context={{ source: "component" }}>
           <span>allowed</span>
         </Can>
@@ -94,7 +94,7 @@ describe("react adapter", () => {
     }
 
     await render(
-      <AuthorProvider authorization={{ evaluate: async () => allowedDecision }} entity={{ id: "u1" }}>
+      <AuthorProvider entityType="User" authorization={{ evaluate: async () => allowedDecision }} entity={{ id: "u1" }}>
         <Probe />
       </AuthorProvider>,
     );

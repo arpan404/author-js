@@ -20,6 +20,7 @@ app.patch(
   "/projects/:id",
   requireCan({
     author,
+    entityType: "User",
     entity: (req) => req.user,
     action: "update",
     resourceType: "Project",
@@ -47,6 +48,7 @@ app.patch(
   "/projects/:id",
   requireCan({
     author,
+    entityType: "User",
     entity: (c) => c.get("user"),
     action: "update",
     resourceType: "Project",
@@ -66,6 +68,7 @@ fastify.patch(
   {
     preHandler: requireCan({
       author,
+      entityType: "User",
       entity: (request) => request.user,
       action: "update",
       resourceType: "Project",
@@ -88,6 +91,7 @@ new Elysia().patch(
   {
     beforeHandle: requireCan({
       author,
+      entityType: "User",
       entity: (ctx) => ctx.user,
       action: "update",
       resourceType: "Project",
@@ -121,6 +125,7 @@ export async function PATCH(
 
   await assertCan({
     author,
+    entityType: "User",
     entity: user,
     action: "update",
     resourceType: "Project",
@@ -162,7 +167,8 @@ Pass values policies need but resources do not contain.
 ```ts
 requireCan({
   author,
-  entity: (req) => req.user,
+  entityType: "User",
+    entity: (req) => req.user,
   action: "create",
   resourceType: "Project",
   resource: (req) => req.organization,

@@ -22,8 +22,8 @@ describe("entitlements", () => {
       policies: [allow("feature allows create", async (ctx: Ctx) => ctx.action === "create" && await ctx.features.has("projects.create"))],
     });
 
-    await expect(author.as({ id: "u1", plan: "free" }).can("create").on("Project", project).allowed()).resolves.toBe(false);
-    await expect(author.as({ id: "u2", plan: "pro" }).can("create").on("Project", project).allowed()).resolves.toBe(true);
+    await expect(author.as("User", { id: "u1", plan: "free" }).can("create").on("Project", project).allowed()).resolves.toBe(false);
+    await expect(author.as("User", { id: "u2", plan: "pro" }).can("create").on("Project", project).allowed()).resolves.toBe(true);
   });
 
   test("checks limits and remaining quota", async () => {
@@ -41,7 +41,7 @@ describe("entitlements", () => {
       })],
     });
 
-    await expect(author.as({ id: "u1", plan: "free" }).can("create").on("Project", project, { used: 0 }).allowed()).resolves.toBe(true);
-    await expect(author.as({ id: "u1", plan: "free" }).can("create").on("Project", project, { used: 1 }).allowed()).resolves.toBe(false);
+    await expect(author.as("User", { id: "u1", plan: "free" }).can("create").on("Project", project, { used: 0 }).allowed()).resolves.toBe(true);
+    await expect(author.as("User", { id: "u1", plan: "free" }).can("create").on("Project", project, { used: 1 }).allowed()).resolves.toBe(false);
   });
 });
