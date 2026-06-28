@@ -53,4 +53,39 @@ describe("postgresStore", () => {
 
     expect(client.calls.some((call) => call.sql.includes("author_audit_logs"))).toBe(true);
   });
+
+  test("supports direct role permission and relation checks", async () => {
+    const client = new FakePostgres();
+    const store = postgresStore({ client });
+    if (!store.hasRole || !store.hasPermission || !store.hasRelation) {
+      throw new Error("postgresStore should expose direct checks");
+    }
+
+    client.rows = [{ exists: 1 }];
+    await expect(
+      store.hasRole({ entityType: "User", entityId: "u1", role: "admin", scopeType: "Org", scopeId: "o1" }),
+    ).resolves.toBe(true);
+    expect(client.calls.at(-1)?.sql).toContain("LIMIT 1");
+
+    client.rows = [{ effect: "allow" }];
+    await expect(
+      store.hasPermission({ entityType: "User", entityId: "u1", action: "read", resourceType: "Project" }),
+    ).resolves.toBe(true);
+
+    client.rows = [{ effect: "allow" }, { effect: "deny" }];
+    await expect(
+      store.hasPermission({ entityType: "User", entityId: "u1", action: "read", resourceType: "Project" }),
+    ).resolves.toBe(false);
+
+    client.rows = [];
+    await expect(
+      store.hasRelation({
+        subjectType: "User",
+        subjectId: "u1",
+        relation: "owner",
+        objectType: "Project",
+        objectId: "p1",
+      }),
+    ).resolves.toBe(false);
+  });
 });
