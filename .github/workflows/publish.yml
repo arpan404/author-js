@@ -17,6 +17,33 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: author
+          POSTGRES_PASSWORD: author
+          POSTGRES_DB: author_js
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U author -d author_js"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27029:27017
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 63799:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -24,6 +51,11 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile
       - run: bun run check
+      - run: bun run test:integration
+        env:
+          POSTGRES_URL: postgres://author:author@localhost:54329/author_js
+          MONGODB_URL: mongodb://localhost:27029
+          REDIS_URL: redis://localhost:63799
       - name: Configure npm auth
         run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
         env:

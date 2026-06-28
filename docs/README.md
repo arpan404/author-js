@@ -14,6 +14,7 @@ New to author.js? Read in this order:
 2. [Management](./management.md) — grant, revoke, and list roles, permissions, and relations
 3. [Adapters](./adapters.md) — persist roles and cache decisions (when you need them)
 4. [React](./react.md) or [Frameworks](./frameworks.md) — wire checks into your UI or API
+5. [Testing](./testing.md) — run local checks, hooks, and real service integration tests
 
 ## Guides
 
@@ -24,6 +25,7 @@ New to author.js? Read in this order:
 | [Adapters](./adapters.md) | Memory, PostgreSQL, MongoDB stores; Redis caching |
 | [React](./react.md) | `AuthorProvider`, `Can`, `Cannot`, hooks |
 | [Frameworks](./frameworks.md) | Express, Hono, Fastify, Elysia, Next.js |
+| [Testing](./testing.md) | Local checks, Husky hooks, Docker integration tests |
 
 ## Packages
 
@@ -89,4 +91,5 @@ See [Frameworks](./frameworks.md) and [React](./react.md) for full examples.
 | [Contributing](../CONTRIBUTING.md) | Development setup and PR guidelines |
 | [Security](../SECURITY.md) | Vulnerability reporting |
 | [Publishing](./publishing.md) | npm release process |
+| [Testing](./testing.md) | Quality gates and integration test setup |
 | [Changelog](../CHANGELOG.md) | Version history |

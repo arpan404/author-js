@@ -119,6 +119,7 @@ Full docs: [docs/README.md](./docs/README.md)
 | [Adapters](./docs/adapters.md) | Memory, PostgreSQL, MongoDB, Redis caching |
 | [React](./docs/react.md) | `AuthorProvider`, `Can`, `Cannot`, hooks |
 | [Frameworks](./docs/frameworks.md) | Express, Hono, Fastify, Elysia, Next.js |
+| [Testing](./docs/testing.md) | Local checks, hooks, Docker integration tests |
 
 ## Development
 
