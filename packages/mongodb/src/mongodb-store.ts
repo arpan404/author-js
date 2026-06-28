@@ -7,7 +7,7 @@ type MongoCollection = {
   find(query: MongoQuery): MongoFindResult;
   insertOne(document: MongoQuery): Promise<unknown>;
   deleteOne(query: MongoQuery): Promise<unknown>;
-  createIndex(index: MongoQuery, options?: MongoQuery): Promise<unknown>;
+  createIndex(index: unknown, options?: unknown): Promise<unknown>;
 };
 type MongoDatabase = { collection(name: string): MongoCollection };
 /** Minimal MongoDB client interface used by the MongoDB adapter. */

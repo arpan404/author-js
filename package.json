@@ -10,6 +10,7 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json && mkdir -p dist/packages/postgres/src && cp packages/postgres/src/schema.sql dist/packages/postgres/src/schema.sql",
     "test": "bun test",
+    "test:integration": "RUN_INTEGRATION=1 bun test tests/integration.test.ts",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun test && bun run build",
     "prepack": "bun run check"
@@ -88,8 +89,12 @@
     "react": ">=18"
   },
   "peerDependenciesMeta": {
-    "pg": { "optional": true },
-    "react": { "optional": true }
+    "pg": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -97,9 +102,11 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "happy-dom": "^20.10.6",
+    "mongodb": "6",
     "pg": "^8.22.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "redis": "^6.0.1",
     "typescript": "^5"
   }
 }

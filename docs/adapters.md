@@ -11,6 +11,25 @@ author.js separates authorization logic from persistence and caching.
 
 Install only what your app needs.
 
+## Local integration environment
+
+Run real PostgreSQL, MongoDB, and Redis services with Docker:
+
+```bash
+docker compose up -d
+bun run test:integration
+```
+
+Defaults:
+
+```txt
+POSTGRES_URL=postgres://author:author@localhost:54329/author_js
+MONGODB_URL=mongodb://localhost:27029
+REDIS_URL=redis://localhost:63799
+```
+
+The same integration test runs in GitHub Actions.
+
 ## Stores
 
 ### Memory
