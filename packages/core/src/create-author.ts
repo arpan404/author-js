@@ -8,6 +8,12 @@ type EntityMap = Record<string, EntityDefinition<unknown, string>>;
 type ResourceMap = Record<string, ResourceDefinition<unknown, string, readonly string[]>>;
 type EntityValue<Entities> = Entities[keyof Entities] extends EntityDefinition<infer Entity, string> ? Entity : never;
 type ResourceValue<Resources, Type extends keyof Resources> = Resources[Type] extends ResourceDefinition<infer Resource, string, readonly string[]> ? Resource : never;
+type ResourceAction<Resources> = Resources[keyof Resources] extends ResourceDefinition<unknown, string, infer Actions> ? Actions[number] : string;
+type TypedResource<Resources, Type extends keyof Resources & string> = ResourceValue<Resources, Type> & { readonly authorType: Type };
+type ResourceOn<Resources, CustomContext extends Record<string, unknown>> = {
+  <Type extends keyof Resources & string>(resourceType: Type, resource: ResourceValue<Resources, Type>, context?: CustomContext): ResourceDecisionBuilder;
+  <Type extends keyof Resources & string>(resource: TypedResource<Resources, Type>, context?: CustomContext): ResourceDecisionBuilder;
+};
 type PolicyContext<Entities, Resources, CustomContext extends Record<string, unknown>> = AuthorPolicyContext<
   EntityValue<Entities>,
   ResourceValue<Resources, keyof Resources>,
@@ -40,12 +46,8 @@ export type ResourceDecisionBuilder = {
 
 export type AuthorInstance<Entities, Resources, CustomContext extends Record<string, unknown>> = {
   as(entity: EntityValue<Entities>): {
-    can<Action extends string>(action: Action): {
-      on<Type extends keyof Resources & string>(resourceType: Type, resource: ResourceValue<Resources, Type>, context?: CustomContext): ResourceDecisionBuilder;
-    };
-    cannot<Action extends string>(action: Action): {
-      on<Type extends keyof Resources & string>(resourceType: Type, resource: ResourceValue<Resources, Type>, context?: CustomContext): ResourceDecisionBuilder;
-    };
+    can<Action extends ResourceAction<Resources>>(action: Action): { on: ResourceOn<Resources, CustomContext> };
+    cannot<Action extends ResourceAction<Resources>>(action: Action): { on: ResourceOn<Resources, CustomContext> };
   };
   evaluate(input: EvaluateInput<CustomContext>): Promise<Decision>;
   readonly store: AuthorStore;
@@ -133,22 +135,15 @@ export function createAuthor<
     store,
     evaluate,
     as(entity) {
-      const chain = (negated: boolean) => (action: string) => ({
-        on: (resourceType: keyof Resources & string, resource: ResourceValue<Resources, keyof Resources>, context?: CustomContext) => {
+      const chain = (negated: boolean) => (action: ResourceAction<Resources>) => ({
+        on: ((first: string | TypedResource<Resources, keyof Resources & string>, second?: ResourceValue<Resources, keyof Resources> | CustomContext, third?: CustomContext) => {
+          const parsed = parseResourceInput(first, second, third);
           const run = async () => {
-            const decision = await evaluate({ entity, action, resourceType, resource, context: context ?? emptyContext<CustomContext>(), mode });
+            const decision = await evaluate({ entity, action, resourceType: parsed.resourceType, resource: parsed.resource, context: parsed.context, mode });
             return negated ? invertDecision(decision) : decision;
           };
-          return {
-            allowed: async () => (await run()).allowed,
-            denied: async () => !(await run()).allowed,
-            explain: run,
-            throw: async () => {
-              const decision = await run();
-              if (!decision.allowed) throw new AuthorizationDeniedError(decision);
-            },
-          };
-        },
+          return decisionBuilder(run);
+        }) as ResourceOn<Resources, CustomContext>,
       });
       return { can: chain(false), cannot: chain(true) };
     },
@@ -161,6 +156,33 @@ function firstValue<T>(record: Record<string, T>): T | undefined {
 
 function emptyContext<CustomContext extends Record<string, unknown>>(): CustomContext {
   return {} as CustomContext;
+}
+
+function decisionBuilder(run: () => Promise<Decision>): ResourceDecisionBuilder {
+  return {
+    allowed: async () => (await run()).allowed,
+    denied: async () => !(await run()).allowed,
+    explain: run,
+    throw: async () => {
+      const decision = await run();
+      if (!decision.allowed) throw new AuthorizationDeniedError(decision);
+    },
+  };
+}
+
+function parseResourceInput<Resources, CustomContext extends Record<string, unknown>>(
+  first: string | TypedResource<Resources, keyof Resources & string>,
+  second: ResourceValue<Resources, keyof Resources> | CustomContext | undefined,
+  third: CustomContext | undefined,
+): { resourceType: string; resource: unknown; context: CustomContext } {
+  if (typeof first === "string") {
+    return { resourceType: first, resource: second, context: third ?? emptyContext<CustomContext>() };
+  }
+  return { resourceType: first.authorType, resource: first, context: isContext(second) ? second : emptyContext<CustomContext>() };
+}
+
+function isContext<CustomContext extends Record<string, unknown>>(value: unknown): value is CustomContext {
+  return typeof value === "object" && value !== null && !("authorType" in value);
 }
 
 function makeDecision(input: {

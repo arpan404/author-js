@@ -47,10 +47,12 @@ function testAuthor(store = memoryStore()) {
 const member = { id: "user_1", role: "member" } satisfies User;
 const admin = { id: "admin_1", role: "admin" } satisfies User;
 const project = { id: "project_1", ownerId: "user_1", orgId: "org_1" } satisfies Project;
+const typedProject = { authorType: "Project", id: "project_1", ownerId: "user_1", orgId: "org_1" } satisfies Project & { authorType: "Project" };
 
 describe("core", () => {
   test("first demo allows owner update", async () => {
     await expect(testAuthor().as(member).can("update").on("Project", project).allowed()).resolves.toBe(true);
+    await expect(testAuthor().as(member).can("update").on(typedProject).allowed()).resolves.toBe(true);
   });
 
   test("denies when no policy matches", async () => {
