@@ -7,7 +7,7 @@ Author JS gives you one authorization model across your API, React UI, and datab
 ## Install
 
 ```bash
-npm install author-js
+bun add author-js
 ```
 
 ## Basic usage
