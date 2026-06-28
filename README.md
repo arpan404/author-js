@@ -1,5 +1,8 @@
 # Author JS
 
+[![CI](https://github.com/arpan404/author-js/actions/workflows/ci.yml/badge.svg)](https://github.com/arpan404/author-js/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/author-js.svg)](https://www.npmjs.com/package/author-js)
+
 TypeScript-first authorization for frontend and backend apps.
 
 Author JS gives you one authorization model across your API, React UI, and database-backed permissions.
@@ -45,6 +48,16 @@ const allowed = await author
 ```
 
 Frontend checks are only UX. Enforce authorization on the backend.
+
+## Release
+
+Publishing is handled by GitHub Actions when a GitHub release is published.
+Set `NPM_TOKEN` in repository secrets, bump `package.json` version, tag a release, and the workflow runs:
+
+```bash
+bun run check
+npm publish --provenance --access public
+```
 
 ## Packages
 

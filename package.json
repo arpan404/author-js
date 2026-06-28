@@ -1,25 +1,87 @@
 {
   "name": "author-js",
+  "version": "0.1.0",
+  "description": "TypeScript-first authorization for frontend and backend apps.",
   "type": "module",
-  "module": "index.ts",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "README.md", "LICENSE"],
   "workspaces": ["packages/*"],
   "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && mkdir -p dist/packages/postgres/src && cp packages/postgres/src/schema.sql dist/packages/postgres/src/schema.sql",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "check": "bun run typecheck && bun test"
+    "check": "bun run typecheck && bun test && bun run build",
+    "prepack": "bun run check"
   },
   "exports": {
-    ".": "./index.ts",
-    "./core": "./packages/core/src/index.ts",
-    "./postgres": "./packages/postgres/src/index.ts",
-    "./mongodb": "./packages/mongodb/src/index.ts",
-    "./react": "./packages/react/src/index.ts",
-    "./express": "./packages/express/src/index.ts",
-    "./hono": "./packages/hono/src/index.ts",
-    "./fastify": "./packages/fastify/src/index.ts",
-    "./next": "./packages/next/src/index.ts",
-    "./next/server": "./packages/next/src/server.ts",
-    "./next/client": "./packages/next/src/client.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/packages/core/src/index.d.ts",
+      "import": "./dist/packages/core/src/index.js"
+    },
+    "./postgres": {
+      "types": "./dist/packages/postgres/src/index.d.ts",
+      "import": "./dist/packages/postgres/src/index.js"
+    },
+    "./postgres/schema.sql": "./dist/packages/postgres/src/schema.sql",
+    "./mongodb": {
+      "types": "./dist/packages/mongodb/src/index.d.ts",
+      "import": "./dist/packages/mongodb/src/index.js"
+    },
+    "./react": {
+      "types": "./dist/packages/react/src/index.d.ts",
+      "import": "./dist/packages/react/src/index.js"
+    },
+    "./express": {
+      "types": "./dist/packages/express/src/index.d.ts",
+      "import": "./dist/packages/express/src/index.js"
+    },
+    "./hono": {
+      "types": "./dist/packages/hono/src/index.d.ts",
+      "import": "./dist/packages/hono/src/index.js"
+    },
+    "./fastify": {
+      "types": "./dist/packages/fastify/src/index.d.ts",
+      "import": "./dist/packages/fastify/src/index.js"
+    },
+    "./next": {
+      "types": "./dist/packages/next/src/index.d.ts",
+      "import": "./dist/packages/next/src/index.js"
+    },
+    "./next/server": {
+      "types": "./dist/packages/next/src/server.d.ts",
+      "import": "./dist/packages/next/src/server.js"
+    },
+    "./next/client": {
+      "types": "./dist/packages/next/src/client.d.ts",
+      "import": "./dist/packages/next/src/client.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "keywords": ["authorization", "rbac", "abac", "rebac", "typescript", "react"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arpan404/author-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/arpan404/author-js/issues"
+  },
+  "homepage": "https://github.com/arpan404/author-js#readme",
+  "peerDependencies": {
+    "pg": ">=8",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "pg": { "optional": true },
+    "react": { "optional": true }
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -27,11 +89,9 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "happy-dom": "^20.10.6",
+    "pg": "^8.22.0",
+    "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "typescript": "^5"
-  },
-  "dependencies": {
-    "pg": "^8.22.0",
-    "react": "^19.2.7"
   }
 }

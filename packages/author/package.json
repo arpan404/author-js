@@ -1,7 +1,0 @@
-{
-  "name": "author-js",
-  "type": "module",
-  "module": "src/index.ts",
-  "exports": { ".": "./src/index.ts" },
-  "dependencies": { "@author-js/core": "workspace:*" }
-}
