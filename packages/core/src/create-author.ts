@@ -1,5 +1,6 @@
 import { decisionCacheKey, type AuthorCache } from "./cache.js";
 import type { EntityDefinition, ResourceDefinition } from "./definitions.js";
+import type { EntitlementContext, EntitlementsConfig } from "./entitlements.js";
 import { AuthorizationDeniedError, MissingParentResourceError, UnknownActionError, UnknownEntityTypeError, UnknownResourceTypeError } from "./errors.js";
 import { normalizePolicyResult, type AuthorPolicyContext, type Policy } from "./policy.js";
 import { memoryStore } from "./memory-store.js";
@@ -32,6 +33,8 @@ export type CreateAuthorInput<Entities, Resources, CustomContext extends Record<
   cache?: AuthorCache;
   /** TTL for cached decisions. Defaults to 30 seconds when `cache` is provided. */
   cacheTtlMs?: number;
+  /** Optional plan, feature, and limit configuration exposed in policy context. */
+  entitlements?: EntitlementsConfig<EntityValue<Entities>, ResourceValue<Resources, keyof Resources>, CustomContext>;
 };
 
 type EvaluateInput<CustomContext extends Record<string, unknown>> = {
@@ -115,6 +118,7 @@ export function createAuthor<
       entityType: entityDefinition.type,
       entityId,
       resourceDefinition,
+      entitlements: input.entitlements,
     });
 
     const matchedAllows: Decision["matchedPolicies"] = [];
@@ -275,6 +279,7 @@ function buildContext<CustomContext extends Record<string, unknown>>(input: {
   mode: Mode;
   store: AuthorStore;
   resourceDefinition: ResourceDefinition<unknown, string, readonly string[]>;
+  entitlements: EntitlementsConfig<unknown, unknown, CustomContext> | undefined;
 }): PolicyContext<EntityMap, ResourceMap, CustomContext> {
   const parents = createParentResolver({
     definition: input.resourceDefinition,
@@ -291,6 +296,24 @@ function buildContext<CustomContext extends Record<string, unknown>>(input: {
     mode: input.mode,
     store: input.store,
     parents,
+    subscription: {
+      plan: () => resolvePlan(input.entitlements, entitlementContext(input)),
+    },
+    features: {
+      has: async (feature) => (await listFeatures(input.entitlements, entitlementContext(input))).includes(feature),
+      list: () => listFeatures(input.entitlements, entitlementContext(input)),
+    },
+    limits: {
+      get: (name) => getLimit(input.entitlements, entitlementContext(input), name),
+      within: async (name, value) => {
+        const limit = await getLimit(input.entitlements, entitlementContext(input), name);
+        return limit === null || value.used < limit;
+      },
+      remaining: async (name, value) => {
+        const limit = await getLimit(input.entitlements, entitlementContext(input), name);
+        return limit === null ? null : Math.max(0, limit - value.used);
+      },
+    },
     relations: {
       has: async (query) => (await input.store.getRelations(query)).length > 0,
       list: (query) => input.store.getRelations(query),
@@ -319,6 +342,51 @@ function buildContext<CustomContext extends Record<string, unknown>>(input: {
       list: (resource) => input.store.getPermissions(permissionQuery(input.entityType, input.entityId, resource)),
     },
   };
+}
+
+function entitlementContext<CustomContext extends Record<string, unknown>>(input: {
+  entity: unknown;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  resource: unknown;
+  context: CustomContext;
+  mode: Mode;
+}): EntitlementContext<unknown, unknown, CustomContext> {
+  return {
+    entity: input.entity,
+    action: input.action,
+    resource: { type: input.resourceType, id: input.resourceId, data: input.resource },
+    context: input.context,
+    mode: input.mode,
+  };
+}
+
+async function resolvePlan<CustomContext extends Record<string, unknown>>(
+  entitlements: EntitlementsConfig<unknown, unknown, CustomContext> | undefined,
+  ctx: EntitlementContext<unknown, unknown, CustomContext>,
+): Promise<string | null> {
+  if (!entitlements) return null;
+  return typeof entitlements.plan === "function" ? entitlements.plan(ctx) : entitlements.plan;
+}
+
+async function listFeatures<CustomContext extends Record<string, unknown>>(
+  entitlements: EntitlementsConfig<unknown, unknown, CustomContext> | undefined,
+  ctx: EntitlementContext<unknown, unknown, CustomContext>,
+): Promise<string[]> {
+  const plan = await resolvePlan(entitlements, ctx);
+  if (!plan) return [];
+  return [...(entitlements?.features?.[plan] ?? [])];
+}
+
+async function getLimit<CustomContext extends Record<string, unknown>>(
+  entitlements: EntitlementsConfig<unknown, unknown, CustomContext> | undefined,
+  ctx: EntitlementContext<unknown, unknown, CustomContext>,
+  name: string,
+): Promise<number | null> {
+  const plan = await resolvePlan(entitlements, ctx);
+  if (!plan) return null;
+  return entitlements?.limits?.[plan]?.[name] ?? null;
 }
 
 function roleQuery(entityType: string, entityId: string, scope: ScopeInput | undefined): GetRolesInput {

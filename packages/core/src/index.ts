@@ -7,5 +7,6 @@ export { allow, deny, skip } from "./policy.js";
 export type { AuthorCache, CacheKeyInput } from "./cache.js";
 export type { AuthorInstance, CreateAuthorInput, ResourceDecisionBuilder } from "./create-author.js";
 export type { EntityDefinition, ResourceDefinition, ResourceParent } from "./definitions.js";
+export type { EntitlementContext, EntitlementsConfig } from "./entitlements.js";
 export type { AuthorPolicyContext, Policy, PolicyChecker, PolicyResult } from "./policy.js";
 export type * from "./types.js";

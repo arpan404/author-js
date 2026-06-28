@@ -143,6 +143,50 @@ ctx.relations.has({
 ctx.entityHasRelation("owner");
 ```
 
+## Subscription features and limits
+
+Author JS can expose plan-based entitlements inside policies. This keeps your public check API unchanged while letting policies consider billing plans, feature flags, and numeric limits.
+
+```ts
+const author = createAuthor({
+  entities,
+  resources,
+  entitlements: {
+    plan: async ({ entity }) => entity.plan,
+    features: {
+      free: ["projects.read"],
+      pro: ["projects.read", "projects.create"],
+    },
+    limits: {
+      free: { projects: 3 },
+      pro: { projects: 100 },
+    },
+  },
+  policies: [
+    allow("plan can create projects", async (ctx) => {
+      if (ctx.action !== "create") return false;
+      if (!(await ctx.features.has("projects.create"))) return false;
+
+      const used = await countProjects(ctx.entity.id);
+      return ctx.limits.within("projects", { used });
+    }),
+  ],
+});
+```
+
+Helpers:
+
+```ts
+await ctx.subscription.plan();
+await ctx.features.has("projects.create");
+await ctx.features.list();
+await ctx.limits.get("projects");
+await ctx.limits.within("projects", { used: 2 });
+await ctx.limits.remaining("projects", { used: 2 });
+```
+
+Limits are not counted automatically. Your app owns usage queries because usage often lives in your domain database. Author JS only compares `used` against the configured plan limit.
+
 ## Decisions
 
 Use `.allowed()` when you only need a boolean:

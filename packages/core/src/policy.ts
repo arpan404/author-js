@@ -25,6 +25,27 @@ export type AuthorPolicyContext<Entity, Resource, CustomContext extends Record<s
   store: AuthorStore;
   /** Parent resource resolver for nested authorization checks. */
   parents: ParentResolver;
+  /** Subscription helpers for plan-aware authorization. */
+  subscription: {
+    /** Returns the current plan, or null when no subscription applies. */
+    plan(): Promise<string | null>;
+  };
+  /** Feature flag helpers resolved from the current plan. */
+  features: {
+    /** Returns true when the current plan includes the feature. */
+    has(feature: string): Promise<boolean>;
+    /** Lists all features enabled for the current plan. */
+    list(): Promise<string[]>;
+  };
+  /** Numeric limit helpers resolved from the current plan. */
+  limits: {
+    /** Returns the configured limit, or null when unlimited/unconfigured. */
+    get(name: string): Promise<number | null>;
+    /** Returns true when `used` is below the configured limit. Null limit means allowed. */
+    within(name: string, input: { used: number }): Promise<boolean>;
+    /** Returns remaining units, or null when unlimited/unconfigured. */
+    remaining(name: string, input: { used: number }): Promise<number | null>;
+  };
   /** Relationship-based authorization helpers. */
   relations: {
     /** Returns true when at least one relation tuple matches the query. */

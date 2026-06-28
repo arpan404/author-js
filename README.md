@@ -117,6 +117,37 @@ import { AuthorProvider, Can } from "author-js/react";
 </AuthorProvider>;
 ```
 
+## Subscription features and limits
+
+Add plan-based entitlements without changing the check API:
+
+```ts
+const author = createAuthor({
+  entities,
+  resources,
+  entitlements: {
+    plan: async ({ entity }) => entity.plan,
+    features: {
+      free: ["projects.read"],
+      pro: ["projects.read", "projects.create"],
+    },
+    limits: {
+      free: { projects: 3 },
+      pro: { projects: 100 },
+    },
+  },
+  policies: [
+    allow("plan can create projects", async (ctx) => {
+      if (ctx.action !== "create") return false;
+      if (!(await ctx.features.has("projects.create"))) return false;
+
+      const used = await countProjects(ctx.entity.id);
+      return ctx.limits.within("projects", { used });
+    }),
+  ],
+});
+```
+
 ## Decisions, not just booleans
 
 ```ts
