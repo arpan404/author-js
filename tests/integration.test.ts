@@ -73,6 +73,11 @@ integration("real adapter integrations", () => {
     await expect(cache.get("decision-key")).resolves.toMatchObject({ allowed: true, reason: "ok" });
     await cache.delete("decision-key");
     await expect(cache.get("decision-key")).resolves.toBeNull();
+
+    await cache.set("ttl-key", decision, 20);
+    await expect(cache.get("ttl-key")).resolves.toMatchObject({ allowed: true });
+    await Bun.sleep(40);
+    await expect(cache.get("ttl-key")).resolves.toBeNull();
   });
 });
 
