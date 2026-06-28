@@ -1,5 +1,7 @@
 # Adapters
 
+This page covers persistence and caching adapters. For application-level grant/revoke APIs, see [Permission management](./management.md).
+
 author.js separates authorization logic from persistence and caching.
 
 | Adapter | Role |

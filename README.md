@@ -115,6 +115,7 @@ Full docs: [docs/README.md](./docs/README.md)
 | Guide | Topics |
 | --- | --- |
 | [Core](./docs/core.md) | Entities, resources, policies, plans, parent checks, project layout |
+| [Permission management](./docs/management.md) | Grant, revoke, and list roles, permissions, and relations |
 | [Adapters](./docs/adapters.md) | Memory, PostgreSQL, MongoDB, Redis caching |
 | [React](./docs/react.md) | `AuthorProvider`, `Can`, `Cannot`, hooks |
 | [Frameworks](./docs/frameworks.md) | Express, Hono, Fastify, Elysia, Next.js |
