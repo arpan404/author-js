@@ -6,12 +6,34 @@ type User = { id: string };
 type Project = { id: string; ownerId: string };
 
 const UserEntity = defineEntity<User>()({ type: "User", id: (user) => user.id });
-const ProjectResource = defineResource<Project>()({ type: "Project", id: (project) => project.id, actions: ["read"] as const });
+const ProjectResource = defineResource<Project>()({
+  type: "Project",
+  id: (project) => project.id,
+  actions: ["read"] as const,
+});
 
 describe("cache", () => {
   test("decision cache key avoids simple concatenation collisions", async () => {
-    const a = await decisionCacheKey({ entityType: "A", entityId: "bc", action: "read", resourceType: "Project", resourceId: "1", mode: "backend", context: {}, resource: {} });
-    const b = await decisionCacheKey({ entityType: "Ab", entityId: "c", action: "read", resourceType: "Project", resourceId: "1", mode: "backend", context: {}, resource: {} });
+    const a = await decisionCacheKey({
+      entityType: "A",
+      entityId: "bc",
+      action: "read",
+      resourceType: "Project",
+      resourceId: "1",
+      mode: "backend",
+      context: {},
+      resource: {},
+    });
+    const b = await decisionCacheKey({
+      entityType: "Ab",
+      entityId: "c",
+      action: "read",
+      resourceType: "Project",
+      resourceId: "1",
+      mode: "backend",
+      context: {},
+      resource: {},
+    });
     expect(a).not.toBe(b);
   });
 
@@ -22,7 +44,12 @@ describe("cache", () => {
       cache,
       entities: { User: UserEntity },
       resources: { Project: ProjectResource },
-      policies: [allow("cached", () => { calls += 1; return true; })],
+      policies: [
+        allow("cached", () => {
+          calls += 1;
+          return true;
+        }),
+      ],
     });
 
     expect(await author.as("User", { id: "u1" }).can("read").on("Project", { id: "p1", ownerId: "u1" })).toBe(true);
@@ -59,8 +86,16 @@ describe("cache", () => {
 
 class FakeRedis implements RedisLike {
   private readonly data = new Map<string, string>();
-  get(key: string) { return this.data.get(key) ?? null; }
-  set(key: string, value: string) { this.data.set(key, value); }
-  del(key: string) { this.data.delete(key); }
-  keys() { return [...this.data.keys()]; }
+  get(key: string) {
+    return this.data.get(key) ?? null;
+  }
+  set(key: string, value: string) {
+    this.data.set(key, value);
+  }
+  del(key: string) {
+    this.data.delete(key);
+  }
+  keys() {
+    return [...this.data.keys()];
+  }
 }

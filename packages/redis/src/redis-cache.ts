@@ -45,5 +45,9 @@ function readDecision(raw: string): Decision | null {
 function isDecision(value: unknown): value is Decision {
   if (typeof value !== "object" || value === null) return false;
   const record = value as Record<string, unknown>;
-  return typeof record["allowed"] === "boolean" && (record["effect"] === "allow" || record["effect"] === "deny") && typeof record["reason"] === "string";
+  return (
+    typeof record.allowed === "boolean" &&
+    (record.effect === "allow" || record.effect === "deny") &&
+    typeof record.reason === "string"
+  );
 }

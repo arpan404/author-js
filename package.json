@@ -5,14 +5,24 @@
   "type": "module",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist", "README.md", "LICENSE"],
-  "workspaces": ["packages/*"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json && mkdir -p dist/packages/postgres/src && cp packages/postgres/src/schema.sql dist/packages/postgres/src/schema.sql",
     "test": "bun test",
     "test:integration": "RUN_INTEGRATION=1 bun test tests/integration.test.ts",
     "typecheck": "tsc --noEmit",
+    "fmt": "biome format --write .",
+    "fmt:check": "biome format .",
+    "lint": "biome lint .",
     "check": "bun run typecheck && bun test && bun run build",
+    "prepare": "husky",
     "prepack": "bun run check"
   },
   "exports": {
@@ -74,7 +84,16 @@
     "access": "public",
     "provenance": true
   },
-  "keywords": ["authorization", "rbac", "abac", "rebac", "typescript", "react", "elysia", "redis"],
+  "keywords": [
+    "authorization",
+    "rbac",
+    "abac",
+    "rebac",
+    "typescript",
+    "react",
+    "elysia",
+    "redis"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -97,11 +116,13 @@
     }
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
     "@types/bun": "latest",
     "@types/pg": "^8.20.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "happy-dom": "^20.10.6",
+    "husky": "^9.1.7",
     "mongodb": "6",
     "pg": "^8.22.0",
     "react": "^19.2.7",

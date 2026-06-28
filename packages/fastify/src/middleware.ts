@@ -2,7 +2,15 @@ import type { Decision } from "../../core/src/index.js";
 
 type MaybePromise<T> = T | Promise<T>;
 type AuthorLike = {
-  evaluate(input: { entityType: string; entity: unknown; action: string; resourceType: string; resource: unknown; context: Record<string, unknown>; mode: "backend" }): Promise<Decision>;
+  evaluate(input: {
+    entityType: string;
+    entity: unknown;
+    action: string;
+    resourceType: string;
+    resource: unknown;
+    context: Record<string, unknown>;
+    mode: "backend";
+  }): Promise<Decision>;
 };
 type ReplyLike = { code(status: number): { send(body: unknown): unknown } };
 
@@ -28,7 +36,15 @@ export function requireCan<Req, Reply extends ReplyLike = ReplyLike>(options: Fa
       options.resource(request),
       options.context?.(request) ?? {},
     ]);
-    const decision = await options.author.evaluate({ entityType, entity, action, resourceType, resource, context, mode: "backend" });
+    const decision = await options.author.evaluate({
+      entityType,
+      entity,
+      action,
+      resourceType,
+      resource,
+      context,
+      mode: "backend",
+    });
     if (!decision.allowed) reply.code(403).send({ error: "Forbidden", reason: decision.reason });
   };
 }

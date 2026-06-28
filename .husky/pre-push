@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+
+bun run check
+docker compose up -d --wait
+trap 'docker compose down' EXIT
+bun run test:integration

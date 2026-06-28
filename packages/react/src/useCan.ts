@@ -20,29 +20,38 @@ export function useCan(input: UseCanInput): UseCanResult {
     let active = true;
     if (author === null) {
       setState({ allowed: false, loading: false, error: missingProvider, decision: null });
-      return () => { active = false; };
+      return () => {
+        active = false;
+      };
     }
     if (entityType === undefined || entity === undefined) {
       setState({ allowed: false, loading: false, error: missingEntity, decision: null });
-      return () => { active = false; };
+      return () => {
+        active = false;
+      };
     }
 
     setState((previous) => ({ ...previous, loading: true, error: null }));
-    author.authorization.evaluate({
-      entityType,
-      entity,
-      action: input.do,
-      resourceType: input.on,
-      resource: input.resource,
-      context: mergedContext,
-      mode: author.mode,
-    }).then((decision) => {
-      if (active) setState(fromDecision(decision));
-    }).catch((error: unknown) => {
-      if (active) setState({ allowed: false, loading: false, error: toError(error), decision: null });
-    });
+    author.authorization
+      .evaluate({
+        entityType,
+        entity,
+        action: input.do,
+        resourceType: input.on,
+        resource: input.resource,
+        context: mergedContext,
+        mode: author.mode,
+      })
+      .then((decision) => {
+        if (active) setState(fromDecision(decision));
+      })
+      .catch((error: unknown) => {
+        if (active) setState({ allowed: false, loading: false, error: toError(error), decision: null });
+      });
 
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [author, entityType, entity, input.do, input.on, resourceKey, contextKey]);
 
   return state;

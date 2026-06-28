@@ -42,7 +42,15 @@ export function requireCan<Req, Res extends ResponseLike = ResponseLike>(options
         options.resource(req),
         options.context?.(req) ?? {},
       ]);
-      const decision = await options.author.evaluate({ entityType, entity, action, resourceType, resource, context, mode: "backend" });
+      const decision = await options.author.evaluate({
+        entityType,
+        entity,
+        action,
+        resourceType,
+        resource,
+        context,
+        mode: "backend",
+      });
       if (decision.allowed) next();
       else res.status(403).json({ error: "Forbidden", reason: decision.reason });
     } catch (error) {

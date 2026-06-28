@@ -2,7 +2,15 @@ import { AuthorizationDeniedError, type Decision } from "../../core/src/index.js
 
 type MaybePromise<T> = T | Promise<T>;
 type AuthorLike = {
-  evaluate(input: { entityType: string; entity: unknown; action: string; resourceType: string; resource: unknown; context: Record<string, unknown>; mode: "backend" }): Promise<Decision>;
+  evaluate(input: {
+    entityType: string;
+    entity: unknown;
+    action: string;
+    resourceType: string;
+    resource: unknown;
+    context: Record<string, unknown>;
+    mode: "backend";
+  }): Promise<Decision>;
 };
 
 /** Input for server-side Next.js authorization assertions. */

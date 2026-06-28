@@ -5,5 +5,5 @@ import type { CanProps } from "./types.js";
 export function Cannot(props: CanProps) {
   const result = useCannot(props);
   if (result.loading) return null;
-  return result.allowed ? <>{props.children}</> : <>{props.fallback ?? null}</>;
+  return result.allowed ? props.children : (props.fallback ?? null);
 }

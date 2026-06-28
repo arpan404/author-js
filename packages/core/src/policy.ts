@@ -1,4 +1,14 @@
-import type { AuthorStore, Mode, ParentResolver, PermissionGrant, RelationTuple, RoleGrant, ScopeInput, ResourceInput, PolicyEffect } from "./types.js";
+import type {
+  AuthorStore,
+  Mode,
+  ParentResolver,
+  PermissionGrant,
+  RelationTuple,
+  RoleGrant,
+  ScopeInput,
+  ResourceInput,
+  PolicyEffect,
+} from "./types.js";
 
 /** Result returned by a policy checker after normalization. */
 export type PolicyResult =
@@ -12,7 +22,12 @@ export type RelationQuery = Partial<RelationTuple>;
 /** Data available inside every policy checker. */
 export type SubjectContext<Type extends string, Data> = { type: Type; id: string; data: Data };
 
-export type AuthorPolicyContext<Entity, Resource, CustomContext extends Record<string, unknown>, Subject = SubjectContext<string, Entity>> = {
+export type AuthorPolicyContext<
+  Entity,
+  Resource,
+  CustomContext extends Record<string, unknown>,
+  Subject = SubjectContext<string, Entity>,
+> = {
   /** Current actor reference with type, ID, and data. Use this for multi-entity apps. */
   subject: Subject;
   /** Current actor data. For multi-entity apps prefer `subject.data` after checking `subject.type`. */

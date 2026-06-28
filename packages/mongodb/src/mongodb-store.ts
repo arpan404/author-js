@@ -1,4 +1,20 @@
-import type { AuditEntry, AuthorStore, DeleteRelationInput, GetPermissionsInput, GetRelationsInput, GetRolesInput, PermissionGrant, PermissionGrantInput, PolicyEffect, RelationTuple, RelationTupleInput, RevokePermissionInput, RevokeRoleInput, RoleGrant, RoleGrantInput } from "../../core/src/index.js";
+import type {
+  AuditEntry,
+  AuthorStore,
+  DeleteRelationInput,
+  GetPermissionsInput,
+  GetRelationsInput,
+  GetRolesInput,
+  PermissionGrant,
+  PermissionGrantInput,
+  PolicyEffect,
+  RelationTuple,
+  RelationTupleInput,
+  RevokePermissionInput,
+  RevokeRoleInput,
+  RoleGrant,
+  RoleGrantInput,
+} from "../../core/src/index.js";
 import { mongoCollections } from "./collections.js";
 
 type MongoQuery = Record<string, unknown>;
@@ -47,7 +63,9 @@ export async function ensureMongoIndexes(input: MongoStoreInput): Promise<void> 
     db.collection(mongoCollections.permissions).createIndex({ resourceType: 1, resourceId: 1 }),
     db.collection(mongoCollections.relations).createIndex({ subjectType: 1, subjectId: 1 }),
     db.collection(mongoCollections.relations).createIndex({ objectType: 1, objectId: 1 }),
-    db.collection(mongoCollections.relations).createIndex({ subjectType: 1, subjectId: 1, relation: 1, objectType: 1, objectId: 1 }, { unique: true }),
+    db
+      .collection(mongoCollections.relations)
+      .createIndex({ subjectType: 1, subjectId: 1, relation: 1, objectType: 1, objectId: 1 }, { unique: true }),
     db.collection(mongoCollections.auditLogs).createIndex({ entityType: 1, entityId: 1 }),
     db.collection(mongoCollections.auditLogs).createIndex({ resourceType: 1, resourceId: 1 }),
     db.collection(mongoCollections.auditLogs).createIndex({ createdAt: 1 }),
@@ -63,43 +81,160 @@ async function remove(collection: MongoCollection, query: MongoQuery): Promise<v
 }
 
 async function findRoles(collection: MongoCollection, input: GetRolesInput): Promise<RoleGrant[]> {
-  return (await collection.find(withOptionals({ entityType: input.entityType, entityId: input.entityId }, "scopeType", input.scopeType, "scopeId", input.scopeId)).toArray()).map(readRole).filter((role) => role !== null);
+  return (
+    await collection
+      .find(
+        withOptionals(
+          { entityType: input.entityType, entityId: input.entityId },
+          "scopeType",
+          input.scopeType,
+          "scopeId",
+          input.scopeId,
+        ),
+      )
+      .toArray()
+  )
+    .map(readRole)
+    .filter((role) => role !== null);
 }
 
 async function findPermissions(collection: MongoCollection, input: GetPermissionsInput): Promise<PermissionGrant[]> {
-  return (await collection.find(withOptionals({ entityType: input.entityType, entityId: input.entityId }, "resourceType", input.resourceType, "resourceId", input.resourceId)).toArray()).map(readPermission).filter((permission) => permission !== null);
+  return (
+    await collection
+      .find(
+        withOptionals(
+          { entityType: input.entityType, entityId: input.entityId },
+          "resourceType",
+          input.resourceType,
+          "resourceId",
+          input.resourceId,
+        ),
+      )
+      .toArray()
+  )
+    .map(readPermission)
+    .filter((permission) => permission !== null);
 }
 
 async function findRelations(collection: MongoCollection, input: GetRelationsInput): Promise<RelationTuple[]> {
-  return (await collection.find(withOptionals({}, "subjectType", input.subjectType, "subjectId", input.subjectId, "relation", input.relation, "objectType", input.objectType, "objectId", input.objectId)).toArray()).map(readRelation).filter((relation) => relation !== null);
+  return (
+    await collection
+      .find(
+        withOptionals(
+          {},
+          "subjectType",
+          input.subjectType,
+          "subjectId",
+          input.subjectId,
+          "relation",
+          input.relation,
+          "objectType",
+          input.objectType,
+          "objectId",
+          input.objectId,
+        ),
+      )
+      .toArray()
+  )
+    .map(readRelation)
+    .filter((relation) => relation !== null);
 }
 
 function roleDocument(input: RoleGrantInput): MongoQuery {
-  return withOptionals({ _id: crypto.randomUUID(), entityType: input.entityType, entityId: input.entityId, role: input.role, createdAt: new Date() }, "scopeType", input.scopeType, "scopeId", input.scopeId);
+  return withOptionals(
+    {
+      _id: crypto.randomUUID(),
+      entityType: input.entityType,
+      entityId: input.entityId,
+      role: input.role,
+      createdAt: new Date(),
+    },
+    "scopeType",
+    input.scopeType,
+    "scopeId",
+    input.scopeId,
+  );
 }
 
 function permissionDocument(input: PermissionGrantInput): MongoQuery {
-  return withOptionals({ _id: crypto.randomUUID(), entityType: input.entityType, entityId: input.entityId, action: input.action, resourceType: input.resourceType, effect: input.effect, createdAt: new Date() }, "resourceId", input.resourceId);
+  return withOptionals(
+    {
+      _id: crypto.randomUUID(),
+      entityType: input.entityType,
+      entityId: input.entityId,
+      action: input.action,
+      resourceType: input.resourceType,
+      effect: input.effect,
+      createdAt: new Date(),
+    },
+    "resourceId",
+    input.resourceId,
+  );
 }
 
 function relationDocument(input: RelationTupleInput): MongoQuery {
-  return { _id: crypto.randomUUID(), subjectType: input.subjectType, subjectId: input.subjectId, relation: input.relation, objectType: input.objectType, objectId: input.objectId, createdAt: new Date() };
+  return {
+    _id: crypto.randomUUID(),
+    subjectType: input.subjectType,
+    subjectId: input.subjectId,
+    relation: input.relation,
+    objectType: input.objectType,
+    objectId: input.objectId,
+    createdAt: new Date(),
+  };
 }
 
 function auditDocument(input: AuditEntry): MongoQuery {
-  return withOptionals({ _id: input.id, entityType: input.entityType, entityId: input.entityId, action: input.action, resourceType: input.resourceType, resourceId: input.resourceId, allowed: input.allowed, reason: input.reason, matchedPolicies: input.matchedPolicies, createdAt: input.createdAt }, "metadata", input.metadata);
+  return withOptionals(
+    {
+      _id: input.id,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      action: input.action,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId,
+      allowed: input.allowed,
+      reason: input.reason,
+      matchedPolicies: input.matchedPolicies,
+      createdAt: input.createdAt,
+    },
+    "metadata",
+    input.metadata,
+  );
 }
 
 function roleQuery(input: RevokeRoleInput): MongoQuery {
-  return withOptionals({ entityType: input.entityType, entityId: input.entityId, role: input.role }, "scopeType", input.scopeType, "scopeId", input.scopeId);
+  return withOptionals(
+    { entityType: input.entityType, entityId: input.entityId, role: input.role },
+    "scopeType",
+    input.scopeType,
+    "scopeId",
+    input.scopeId,
+  );
 }
 
 function permissionQuery(input: RevokePermissionInput): MongoQuery {
-  return withOptionals({ entityType: input.entityType, entityId: input.entityId, action: input.action, resourceType: input.resourceType, effect: input.effect }, "resourceId", input.resourceId);
+  return withOptionals(
+    {
+      entityType: input.entityType,
+      entityId: input.entityId,
+      action: input.action,
+      resourceType: input.resourceType,
+      effect: input.effect,
+    },
+    "resourceId",
+    input.resourceId,
+  );
 }
 
 function relationQuery(input: DeleteRelationInput): MongoQuery {
-  return { subjectType: input.subjectType, subjectId: input.subjectId, relation: input.relation, objectType: input.objectType, objectId: input.objectId };
+  return {
+    subjectType: input.subjectType,
+    subjectId: input.subjectId,
+    relation: input.relation,
+    objectType: input.objectType,
+    objectId: input.objectId,
+  };
 }
 
 function readRole(document: unknown): RoleGrant | null {
@@ -109,7 +244,15 @@ function readRole(document: unknown): RoleGrant | null {
   const entityId = stringAt(document, "entityId");
   const role = stringAt(document, "role");
   const createdAt = dateAt(document, "createdAt");
-  return id && entityType && entityId && role && createdAt ? optional({ id, entityType, entityId, role, createdAt }, "scopeType", stringAt(document, "scopeType"), "scopeId", stringAt(document, "scopeId")) : null;
+  return id && entityType && entityId && role && createdAt
+    ? optional(
+        { id, entityType, entityId, role, createdAt },
+        "scopeType",
+        stringAt(document, "scopeType"),
+        "scopeId",
+        stringAt(document, "scopeId"),
+      )
+    : null;
 }
 
 function readPermission(document: unknown): PermissionGrant | null {
@@ -121,7 +264,13 @@ function readPermission(document: unknown): PermissionGrant | null {
   const resourceType = stringAt(document, "resourceType");
   const effect = effectAt(document, "effect");
   const createdAt = dateAt(document, "createdAt");
-  return id && entityType && entityId && action && resourceType && effect && createdAt ? optional({ id, entityType, entityId, action, resourceType, effect, createdAt }, "resourceId", stringAt(document, "resourceId")) : null;
+  return id && entityType && entityId && action && resourceType && effect && createdAt
+    ? optional(
+        { id, entityType, entityId, action, resourceType, effect, createdAt },
+        "resourceId",
+        stringAt(document, "resourceId"),
+      )
+    : null;
 }
 
 function readRelation(document: unknown): RelationTuple | null {
@@ -133,7 +282,9 @@ function readRelation(document: unknown): RelationTuple | null {
   const objectType = stringAt(document, "objectType");
   const objectId = stringAt(document, "objectId");
   const createdAt = dateAt(document, "createdAt");
-  return id && subjectType && subjectId && relation && objectType && objectId && createdAt ? { id, subjectType, subjectId, relation, objectType, objectId, createdAt } : null;
+  return id && subjectType && subjectId && relation && objectType && objectId && createdAt
+    ? { id, subjectType, subjectId, relation, objectType, objectId, createdAt }
+    : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -141,7 +292,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function idAt(row: Record<string, unknown>): string | undefined {
-  const id = row["id"] ?? row["_id"];
+  const id = row.id ?? row._id;
   return typeof id === "string" ? id : undefined;
 }
 
@@ -163,11 +314,24 @@ function dateAt(row: Record<string, unknown>, key: string): Date | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
-function optional<T extends object, K1 extends string, K2 extends string>(base: T, key: K1, value: string | undefined, key2?: K2, value2?: string | undefined): T & Partial<Record<K1 | K2, string>> {
-  return { ...base, ...(value === undefined ? {} : { [key]: value }), ...(key2 === undefined || value2 === undefined ? {} : { [key2]: value2 }) };
+function optional<T extends object, K1 extends string, K2 extends string>(
+  base: T,
+  key: K1,
+  value: string | undefined,
+  key2?: K2,
+  value2?: string | undefined,
+): T & Partial<Record<K1 | K2, string>> {
+  return {
+    ...base,
+    ...(value === undefined ? {} : { [key]: value }),
+    ...(key2 === undefined || value2 === undefined ? {} : { [key2]: value2 }),
+  };
 }
 
-function withOptionals(base: MongoQuery, ...entries: readonly [string, unknown, string?, unknown?, string?, unknown?, string?, unknown?, string?, unknown?]): MongoQuery {
+function withOptionals(
+  base: MongoQuery,
+  ...entries: readonly [string, unknown, string?, unknown?, string?, unknown?, string?, unknown?, string?, unknown?]
+): MongoQuery {
   const output: MongoQuery = { ...base };
   for (let index = 0; index < entries.length; index += 2) {
     const key = entries[index];

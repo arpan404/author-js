@@ -2,7 +2,9 @@
   "name": "@author-js/react",
   "type": "module",
   "module": "src/index.ts",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "peerDependencies": {
     "@author-js/core": "workspace:*",
     "react": ">=18"

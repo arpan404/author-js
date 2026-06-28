@@ -74,7 +74,17 @@ describe("react adapter", () => {
     const seen: unknown[] = [];
 
     await render(
-      <AuthorProvider entityType="User" authorization={{ evaluate: async (input) => { seen.push(input.context); return allowedDecision; } }} entity={{ id: "u1" }} context={{ tenantId: "tenant_1", source: "provider" }}>
+      <AuthorProvider
+        entityType="User"
+        authorization={{
+          evaluate: async (input) => {
+            seen.push(input.context);
+            return allowedDecision;
+          },
+        }}
+        entity={{ id: "u1" }}
+        context={{ tenantId: "tenant_1", source: "provider" }}
+      >
         <Can do="read" on="Project" resource={{ id: "p1" }} context={{ source: "component" }}>
           <span>allowed</span>
         </Can>

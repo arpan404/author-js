@@ -72,10 +72,7 @@ export function defineContext<T extends Record<string, unknown>>(): ContextDefin
 }
 
 export function defineResource<T>() {
-  return function createResourceDefinition<
-    const Type extends string,
-    const Actions extends readonly string[],
-  >(input: {
+  return function createResourceDefinition<const Type extends string, const Actions extends readonly string[]>(input: {
     /** Stable resource type name. */
     type: Type;
     /** Returns a stable resource ID. */
