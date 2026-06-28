@@ -1,12 +1,15 @@
 import { Pool } from "pg";
 import type { AuditEntry, AuthorStore, DeleteRelationInput, GetPermissionsInput, GetRelationsInput, GetRolesInput, PermissionGrant, PermissionGrantInput, PolicyEffect, RelationTuple, RelationTupleInput, RevokePermissionInput, RevokeRoleInput, RoleGrant, RoleGrantInput } from "../../core/src/index";
 
+/** Minimal pg-compatible client interface used by the PostgreSQL adapter. */
 export type PostgresClient = {
   query(sql: string, values?: readonly unknown[]): Promise<{ rows: readonly unknown[] }>;
 };
 
+/** PostgreSQL adapter configuration. Pass either a pg-compatible client or a connection string. */
 export type PostgresStoreInput = { client: PostgresClient } | { connectionString: string };
 
+/** Creates an AuthorStore backed by PostgreSQL tables from `schema.sql`. */
 export function postgresStore(input: PostgresStoreInput): AuthorStore {
   const db: PostgresClient = "client" in input ? input.client : new Pool({ connectionString: input.connectionString });
   return {

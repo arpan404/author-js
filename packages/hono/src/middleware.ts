@@ -7,6 +7,7 @@ type AuthorLike = {
 type HonoContextLike = { json(body: unknown, status?: number): Response | Promise<Response> };
 type Next = () => Promise<void>;
 
+/** Options for Hono authorization middleware. */
 export type HonoRequireCanOptions<C> = {
   author: AuthorLike;
   entity(context: C): MaybePromise<unknown>;
@@ -16,6 +17,7 @@ export type HonoRequireCanOptions<C> = {
   context?: (context: C) => MaybePromise<Record<string, unknown>>;
 };
 
+/** Creates Hono-compatible middleware that returns a 403 JSON response when denied. */
 export function requireCan<C extends HonoContextLike>(options: HonoRequireCanOptions<C>) {
   return async (context: C, next: Next): Promise<Response | void> => {
     const [entity, action, resourceType, resource, customContext] = await Promise.all([

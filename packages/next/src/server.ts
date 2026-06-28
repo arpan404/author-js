@@ -5,6 +5,7 @@ type AuthorLike = {
   evaluate(input: { entity: unknown; action: string; resourceType: string; resource: unknown; context: Record<string, unknown>; mode: "backend" }): Promise<Decision>;
 };
 
+/** Input for server-side Next.js authorization assertions. */
 export type AssertCanInput = {
   author: AuthorLike;
   entity: unknown;
@@ -14,6 +15,7 @@ export type AssertCanInput = {
   context?: Record<string, unknown>;
 };
 
+/** Options for building reusable Next.js server authorization checks. */
 export type NextRequireCanOptions<Req> = {
   author: AuthorLike;
   entity(request: Req): MaybePromise<unknown>;
@@ -23,6 +25,7 @@ export type NextRequireCanOptions<Req> = {
   context?: (request: Req) => MaybePromise<Record<string, unknown>>;
 };
 
+/** Evaluates a backend check and throws `AuthorizationDeniedError` when denied. */
 export async function assertCan(input: AssertCanInput): Promise<Decision> {
   const decision = await input.author.evaluate({
     entity: input.entity,
@@ -36,6 +39,7 @@ export async function assertCan(input: AssertCanInput): Promise<Decision> {
   return decision;
 }
 
+/** Creates a reusable request-to-decision helper for Next.js route handlers and server actions. */
 export function requireCan<Req>(options: NextRequireCanOptions<Req>) {
   return async (request: Req): Promise<Decision> => {
     const [entity, action, resourceType, resource, context] = await Promise.all([

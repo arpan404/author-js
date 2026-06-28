@@ -8,6 +8,7 @@ function sameOptional(left: string | undefined, right: string | undefined): bool
   return right === undefined || left === right;
 }
 
+/** In-memory store useful for tests, demos, and local development. */
 export type MemoryStore = AuthorStore & {
   readonly roles: readonly RoleGrant[];
   readonly permissions: readonly PermissionGrant[];
@@ -15,6 +16,11 @@ export type MemoryStore = AuthorStore & {
   readonly auditLogs: readonly AuditEntry[];
 };
 
+/**
+ * Creates an in-memory AuthorStore.
+ *
+ * Data is process-local and cleared when the process exits.
+ */
 export function memoryStore(): MemoryStore {
   const roles: RoleGrant[] = [];
   const permissions: PermissionGrant[] = [];

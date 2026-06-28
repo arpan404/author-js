@@ -6,6 +6,7 @@ import type { UseCanInput, UseCanResult } from "./types";
 const missingProvider = new Error("AuthorProvider is required");
 const missingEntity = new Error("Author entity is required");
 
+/** Runs an async `can` check and returns loading, error, boolean, and decision state. */
 export function useCan(input: UseCanInput): UseCanResult {
   const author = useOptionalAuthor();
   const entity = input.i ?? author?.entity;

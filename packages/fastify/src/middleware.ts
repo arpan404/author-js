@@ -6,6 +6,7 @@ type AuthorLike = {
 };
 type ReplyLike = { code(status: number): { send(body: unknown): unknown } };
 
+/** Options for Fastify authorization pre-handlers. */
 export type FastifyRequireCanOptions<Req> = {
   author: AuthorLike;
   entity(request: Req): MaybePromise<unknown>;
@@ -15,6 +16,7 @@ export type FastifyRequireCanOptions<Req> = {
   context?: (request: Req) => MaybePromise<Record<string, unknown>>;
 };
 
+/** Creates a Fastify-compatible pre-handler that sends 403 when denied. */
 export function requireCan<Req, Reply extends ReplyLike = ReplyLike>(options: FastifyRequireCanOptions<Req>) {
   return async (request: Req, reply: Reply): Promise<void> => {
     const [entity, action, resourceType, resource, context] = await Promise.all([

@@ -20,6 +20,7 @@ type PolicyContext<Entities, Resources, CustomContext extends Record<string, unk
   CustomContext
 >;
 
+/** Configuration for `createAuthor`. */
 export type CreateAuthorInput<Entities, Resources, CustomContext extends Record<string, unknown>> = {
   entities: Entities;
   resources: Resources;
@@ -37,6 +38,7 @@ type EvaluateInput<CustomContext extends Record<string, unknown>> = {
   mode: Mode;
 };
 
+/** Fluent result returned by `.on(...)`. Await it for a boolean or call explicit methods. */
 export type ResourceDecisionBuilder = PromiseLike<boolean> & {
   allowed(): Promise<boolean>;
   denied(): Promise<boolean>;
@@ -44,6 +46,7 @@ export type ResourceDecisionBuilder = PromiseLike<boolean> & {
   throw(): Promise<void>;
 };
 
+/** Authorization engine instance created by `createAuthor`. */
 export type AuthorInstance<Entities, Resources, CustomContext extends Record<string, unknown>> = {
   as(entity: EntityValue<Entities>): {
     can<Action extends ResourceAction<Resources>>(action: Action): { on: ResourceOn<Resources, CustomContext> };
@@ -53,6 +56,12 @@ export type AuthorInstance<Entities, Resources, CustomContext extends Record<str
   readonly store: AuthorStore;
 };
 
+/**
+ * Creates an authorization engine from entity definitions, resource definitions, policies, and an optional store.
+ *
+ * @example
+ * const allowed = await author.as(user).can("update").on("Project", project).allowed();
+ */
 export function createAuthor<
   const Entities extends EntityMap,
   const Resources extends ResourceMap,

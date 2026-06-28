@@ -18,6 +18,7 @@ type ResponseLike = {
 
 type Next = (error?: unknown) => void;
 
+/** Options for Express-style authorization middleware. */
 export type RequireCanOptions<Req> = {
   author: AuthorLike;
   entity(req: Req): MaybePromise<unknown>;
@@ -27,6 +28,7 @@ export type RequireCanOptions<Req> = {
   context?: (req: Req) => MaybePromise<Record<string, unknown>>;
 };
 
+/** Creates Express-compatible middleware that returns 403 when authorization is denied. */
 export function requireCan<Req, Res extends ResponseLike = ResponseLike>(options: RequireCanOptions<Req>) {
   return async (req: Req, res: Res, next: Next): Promise<void> => {
     try {

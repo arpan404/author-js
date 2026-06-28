@@ -1,6 +1,7 @@
 import { useCan } from "./useCan";
 import type { CanProps } from "./types";
 
+/** Renders children when the current entity can perform an action on a resource. */
 export function Can(props: CanProps) {
   const result = useCan(props);
   if (result.loading) return null;

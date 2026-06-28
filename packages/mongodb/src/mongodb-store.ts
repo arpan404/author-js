@@ -10,9 +10,12 @@ type MongoCollection = {
   createIndex(index: MongoQuery, options?: MongoQuery): Promise<unknown>;
 };
 type MongoDatabase = { collection(name: string): MongoCollection };
+/** Minimal MongoDB client interface used by the MongoDB adapter. */
 export type MongoClientLike = { db(name: string): MongoDatabase };
+/** MongoDB adapter configuration. */
 export type MongoStoreInput = { client: MongoClientLike; database: string };
 
+/** Creates an AuthorStore backed by MongoDB collections. */
 export function mongodbStore(input: MongoStoreInput): AuthorStore {
   const db = input.client.db(input.database);
   const roles = db.collection(mongoCollections.roles);
@@ -34,6 +37,7 @@ export function mongodbStore(input: MongoStoreInput): AuthorStore {
   };
 }
 
+/** Creates recommended indexes for Author JS MongoDB collections. Safe to run during setup. */
 export async function ensureMongoIndexes(input: MongoStoreInput): Promise<void> {
   const db = input.client.db(input.database);
   await Promise.all([
