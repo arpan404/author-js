@@ -1,17 +1,19 @@
 # Adapters
 
-Author JS keeps persistence and caching behind small interfaces.
+author.js separates authorization logic from persistence and caching.
 
-- **Stores** persist authorization data: roles, permissions, relations, and audit logs.
-- **Caches** store evaluated decisions for a short time.
+| Adapter | Role |
+| --- | --- |
+| **Store** | Roles, permissions, relations, audit logs |
+| **Cache** | Short-lived evaluated decisions |
 
-Use only the adapters your app needs.
+Install only what your app needs.
 
 ## Stores
 
 ### Memory
 
-Use memory for tests and local examples.
+For tests and local development.
 
 ```ts
 import { memoryStore } from "author-js";
@@ -27,7 +29,7 @@ await store.grantRole({
 });
 ```
 
-Memory data is process-local and disappears when the process exits.
+Data is process-local and does not survive restarts.
 
 ### PostgreSQL
 
@@ -39,26 +41,22 @@ const store = postgresStore({
 });
 ```
 
-You can also pass an existing pg-compatible client:
+Pass an existing pg-compatible client:
 
 ```ts
 const store = postgresStore({ client });
 ```
 
-The SQL schema is published with the package:
+Schema file: `author-js/postgres/schema.sql`
 
-```txt
-author-js/postgres/schema.sql
-```
-
-It creates:
+Tables:
 
 - `author_roles`
 - `author_permissions`
 - `author_relations`
 - `author_audit_logs`
 
-`author-js/postgres` uses `pg`, so keep it out of edge runtimes.
+Requires `pg`. Not suitable for edge runtimes.
 
 ### MongoDB
 
@@ -73,9 +71,9 @@ const store = mongodbStore({
 await ensureMongoIndexes({ client, database: "my_app" });
 ```
 
-Run `ensureMongoIndexes` during setup or migrations, not during every request.
+Run `ensureMongoIndexes` during setup or migrations.
 
-Mongo collections:
+Collections:
 
 - `author_roles`
 - `author_permissions`
@@ -84,19 +82,13 @@ Mongo collections:
 
 ## Audit logs
 
-If the store implements `writeAuditLog`, Author JS calls it after each decision.
+Stores that implement `writeAuditLog` receive a log entry after each decision. Each entry records the outcome, matched policies, and actor.
 
-Audit logs help answer:
+For high-volume apps, use a custom store that queues or samples writes.
 
-- why was this action allowed?
-- which policy matched?
-- who accessed this resource?
+## Decision cache
 
-For high-volume apps, consider a custom store that queues or samples audit writes.
-
-## Decision caching
-
-Decision caching is optional. It is useful when the same backend check runs many times in a short period.
+Optional. Useful when the same check runs repeatedly in a short window.
 
 ```ts
 import { createAuthor, memoryCache } from "author-js";
@@ -129,17 +121,17 @@ const author = createAuthor({
 });
 ```
 
-The Redis adapter accepts a minimal client with `get`, `set`, and `del`, so it works with Redis-like clients without coupling Author JS to one Redis package.
+Accepts any client with `get`, `set`, and `del`.
 
 ### Invalidation
 
-Clear through the author instance when the cache supports it:
+Clear the entire cache:
 
 ```ts
 await author.invalidate();
 ```
 
-Delete a specific key when you have one:
+Delete a specific key:
 
 ```ts
 import { decisionCacheKey } from "author-js";
@@ -158,25 +150,4 @@ const key = await decisionCacheKey({
 await cache.delete(key);
 ```
 
-Invalidate after changes that affect authorization:
-
-- role grant or revoke
-- permission grant or revoke
-- relation create or delete
-- plan change
-- tenant or ownership change
-
-### Cache key safety
-
-Cache keys are namespaced and SHA-256 hashed. The input parts are length-delimited before hashing, so similar strings cannot accidentally collapse into the same key.
-
-The key includes:
-
-- entity type and ID
-- action
-- resource type and ID
-- mode
-- context
-- resource snapshot
-
-Use short TTLs for permission-sensitive applications.
+Invalidate after role, permission, relation, plan, tenant, or ownership changes.

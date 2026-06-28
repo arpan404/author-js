@@ -1,20 +1,16 @@
-# Core guide
+# Core
 
-This guide shows how to model authorization in Author JS without building one giant policy file.
-
-Author JS answers one question:
+author.js answers one question:
 
 ```txt
 Can this entity perform this action on this resource in this context?
 ```
 
-In code:
-
 ```ts
 await author.as(user).can("update").on("Project", project);
 ```
 
-## 1. Define entities and resources
+## Entities and resources
 
 Entities are actors. Resources are the objects being protected.
 
@@ -55,9 +51,9 @@ export const ProjectResource = defineResource<Project>()({
 
 `type` and `id` are the stable references used in decisions, audit logs, roles, permissions, relationships, and cache keys.
 
-## 2. Write policies
+## Policies
 
-Policies are named rules. They return `true` to match and `false` to skip.
+Policies are named rules. Return `true` to match, `false` to skip.
 
 ```ts
 import { allow, deny } from "author-js";
@@ -76,16 +72,16 @@ export const projectPolicies = [
 ] as const;
 ```
 
-Evaluation rules are simple:
+Evaluation order:
 
-1. all policies run
-2. any matching deny wins
-3. otherwise any matching allow wins
-4. otherwise the result is denied
+1. All policies run.
+2. Any matching deny wins.
+3. Otherwise any matching allow wins.
+4. Otherwise the result is denied.
 
-## 3. Compose the author instance
+## author instance
 
-Keep definitions, plans, and policies separate. Compose them once.
+Keep definitions, plans, and policies in separate files. Compose them once.
 
 ```ts
 import { createAuthor } from "author-js";
@@ -107,7 +103,7 @@ export const author = createAuthor({
 });
 ```
 
-Suggested structure:
+Suggested layout:
 
 ```txt
 src/authorization/
@@ -120,9 +116,7 @@ src/authorization/
     billing.ts
 ```
 
-Plain arrays are enough for most apps. Avoid plugin registries until you actually need them.
-
-## 4. Use the check API
+## Check API
 
 Boolean result:
 
@@ -140,7 +134,7 @@ const decision = await author
   .explain();
 ```
 
-Backend enforcement:
+Enforcement:
 
 ```ts
 await author.as(user).can("delete").on("Project", project).throw();
@@ -148,9 +142,9 @@ await author.as(user).can("delete").on("Project", project).throw();
 
 `.throw()` raises `AuthorizationDeniedError` when denied.
 
-## 5. Use request context for request-specific data
+## Context
 
-Context is for data that belongs to one check: IP address, tenant ID, usage count, feature rollout bucket, and similar values.
+Pass request-specific data that policies need but resources do not contain: IP address, tenant ID, usage counts, feature flags.
 
 ```ts
 await author.as(user).can("create").on("Project", project, {
@@ -159,17 +153,15 @@ await author.as(user).can("create").on("Project", project, {
 });
 ```
 
-Policies can read it:
-
 ```ts
 allow("trusted IP can read reports", ({ action, context }) => {
   return action === "read" && context.ip === "127.0.0.1";
 });
 ```
 
-## 6. Centralize plans, features, and limits
+## Plans, features, and limits
 
-Keep billing capabilities in one file so product and engineering can review them easily.
+Centralize billing capabilities in one file.
 
 ```ts
 export const plans = {
@@ -200,7 +192,7 @@ export const entitlements = {
 };
 ```
 
-Then use entitlement helpers in policies:
+Use entitlement helpers in policies:
 
 ```ts
 allow("plan can create projects", async (ctx) => {
@@ -212,9 +204,7 @@ allow("plan can create projects", async (ctx) => {
 });
 ```
 
-Author JS does not count usage for you. Usage usually lives in your domain database, so pass it through context or query it in the policy.
-
-Available helpers:
+Pass usage through context or query it inside the policy.
 
 ```ts
 await ctx.subscription.plan();
@@ -225,9 +215,9 @@ await ctx.limits.within("projects", { used: 2 });
 await ctx.limits.remaining("projects", { used: 2 });
 ```
 
-## 7. Use parent helpers explicitly
+## Parent resources
 
-Parent permissions are not inherited automatically. Explicit rules are safer and easier to audit.
+Parent permissions are not inherited automatically. Write explicit rules.
 
 ```ts
 allow("organization admins can update projects", async (ctx) => {
@@ -237,8 +227,6 @@ allow("organization admins can update projects", async (ctx) => {
   return ctx.parents.hasRole("admin", "organization");
 });
 ```
-
-Helpers:
 
 ```ts
 await ctx.parents.get("organization");
@@ -251,7 +239,7 @@ await ctx.parents.hasRelation("member", "organization");
 
 Use `getRequired` when a missing parent is a programming error. Use `get` when the parent is optional.
 
-## 8. Inspect decisions
+## Decisions
 
 `.explain()` returns the full decision:
 

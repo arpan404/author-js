@@ -1,14 +1,14 @@
-# Security policy
+# Security
 
 ## Supported versions
 
-Author JS is pre-1.0. Security fixes target the latest published version.
+Security fixes target the latest published version.
 
 ## Reporting a vulnerability
 
-Please do not open a public issue for security reports.
+Do not open a public issue for security reports.
 
-Report vulnerabilities by emailing Arpan Bhandari or by opening a private GitHub security advisory if available on the repository.
+Email Arpan Bhandari or open a private GitHub security advisory on the repository.
 
 Include:
 
@@ -19,6 +19,4 @@ Include:
 
 ## Security model
 
-Frontend authorization is only UX. Backend checks are the security boundary.
-
-Use server-side Author JS checks before mutating or returning protected data.
+Enforce authorization on the server before reading or mutating protected data. React and other frontend checks control UI only.

@@ -1,4 +1,4 @@
-# Author JS
+# author.js
 
 [![CI](https://github.com/arpan404/author-js/actions/workflows/ci.yml/badge.svg)](https://github.com/arpan404/author-js/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/author-js.svg)](https://www.npmjs.com/package/author-js)
@@ -6,15 +6,13 @@
 
 TypeScript-first authorization for SaaS apps, APIs, and React UIs.
 
-Author JS lets you write authorization as normal TypeScript policies:
+Write authorization as normal TypeScript policies:
 
 ```ts
 const allowed = await author.as(user).can("update").on("Project", project);
 ```
 
-Use it for RBAC, ABAC, ReBAC, parent-resource checks, subscription features, limits, UI rendering, and backend enforcement.
-
-> Frontend checks improve UX. Backend checks protect data.
+Supports RBAC, ABAC, ReBAC, parent-resource checks, subscription features, limits, UI rendering, and backend enforcement.
 
 ## Install
 
@@ -22,13 +20,13 @@ Use it for RBAC, ABAC, ReBAC, parent-resource checks, subscription features, lim
 bun add author-js
 ```
 
-Install peer dependencies only for the adapters you use:
+Add peer dependencies only for the adapters you use:
 
 ```bash
 bun add pg react
 ```
 
-## Quick example
+## Quick start
 
 ```ts
 import { allow, createAuthor, defineEntity, defineResource } from "author-js";
@@ -64,33 +62,31 @@ await author.as(user).can("update").on("Project", project).throw();
 
 ## Packages
 
-| Entry point | Purpose |
+| Import | Purpose |
 | --- | --- |
 | `author-js` | Core API |
 | `author-js/postgres` | PostgreSQL store |
 | `author-js/mongodb` | MongoDB store |
 | `author-js/redis` | Redis decision cache |
-| `author-js/react` | React provider, components, hooks |
+| `author-js/react` | Provider, components, hooks |
 | `author-js/express` | Express middleware |
 | `author-js/hono` | Hono middleware |
 | `author-js/fastify` | Fastify pre-handler |
 | `author-js/elysia` | Elysia beforeHandle helper |
-| `author-js/next` | Next.js server/client helpers |
+| `author-js/next` | Next.js entry |
+| `author-js/next/server` | Server-side `assertCan` and `requireCan` |
+| `author-js/next/client` | React components for client components |
 
 ## Documentation
 
-Start here:
+Full docs: [docs/README.md](./docs/README.md)
 
-1. [Core guide](./docs/core.md) — entities, resources, policies, plans, parent checks, project structure
-2. [Adapters](./docs/adapters.md) — memory, PostgreSQL, MongoDB, Redis caching
-3. [React](./docs/react.md) — `AuthorProvider`, `Can`, `Cannot`, `useCan`
-4. [Frameworks](./docs/frameworks.md) — Express, Hono, Fastify, Elysia, Next.js
-
-Project docs:
-
-- [Security policy](./SECURITY.md)
-- [Contributing](./CONTRIBUTING.md)
-- [Publishing](./docs/publishing.md)
+| Guide | Topics |
+| --- | --- |
+| [Core](./docs/core.md) | Entities, resources, policies, plans, parent checks, project layout |
+| [Adapters](./docs/adapters.md) | Memory, PostgreSQL, MongoDB, Redis caching |
+| [React](./docs/react.md) | `AuthorProvider`, `Can`, `Cannot`, hooks |
+| [Frameworks](./docs/frameworks.md) | Express, Hono, Fastify, Elysia, Next.js |
 
 ## Development
 

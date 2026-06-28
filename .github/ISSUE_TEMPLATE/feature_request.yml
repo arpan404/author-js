@@ -13,7 +13,7 @@ body:
     id: proposal
     attributes:
       label: Proposal
-      description: What should Author JS add or change?
+      description: What should author.js add or change?
     validations:
       required: true
   - type: textarea

@@ -1,15 +1,15 @@
 # Frameworks
 
-Framework adapters put authorization at your backend route boundary.
+Framework adapters enforce authorization at the route boundary.
 
-Every adapter follows the same shape:
+Each adapter:
 
-1. resolve the entity from the request
-2. load the actual resource from your database
-3. evaluate Author JS
-4. return 403 when denied
+1. Resolves the entity from the request
+2. Loads the resource from your database
+3. Evaluates author.js in `backend` mode
+4. Returns 403 when denied
 
-Always authorize against the loaded resource, not only route params. The loaded resource contains ownership, tenant, visibility, parent IDs, and other attributes your policies need.
+Authorize against the loaded resource, not route params alone. The loaded resource carries ownership, tenant, visibility, parent IDs, and other attributes policies depend on.
 
 ## Express
 
@@ -32,7 +32,7 @@ app.patch(
 );
 ```
 
-Denied requests return:
+Denied response:
 
 ```json
 { "error": "Forbidden", "reason": "..." }
@@ -97,7 +97,7 @@ new Elysia().patch(
 );
 ```
 
-When denied, the hook sets `ctx.set.status = 403` and returns:
+When denied, sets `ctx.set.status = 403` and returns:
 
 ```json
 { "error": "Forbidden", "reason": "..." }
@@ -105,7 +105,9 @@ When denied, the hook sets `ctx.set.status = 403` and returns:
 
 ## Next.js
 
-Use `assertCan` in route handlers, server actions, and server components.
+### assertCan
+
+For route handlers, server actions, and server components.
 
 ```ts
 import { assertCan } from "author-js/next/server";
@@ -130,11 +132,32 @@ export async function PATCH(
 }
 ```
 
-`assertCan` throws `AuthorizationDeniedError` when denied. Convert that error to a 403 response in your app error handler.
+Throws `AuthorizationDeniedError` when denied. Map it to a 403 in your error handler.
 
-## Passing usage and request data
+### requireCan
 
-Adapters accept a `context` function. Use it for values policies need but resources do not contain.
+Reusable check function for route handlers and server actions.
+
+```ts
+import { requireCan } from "author-js/next/server";
+
+const canUpdateProject = requireCan({
+  author,
+  entity: async () => getCurrentUser(),
+  action: "update",
+  resourceType: "Project",
+  resource: async (request) => loadProject(getProjectId(request)),
+});
+
+export async function PATCH(request: Request) {
+  await canUpdateProject(request);
+  // ...
+}
+```
+
+## Context
+
+Pass values policies need but resources do not contain.
 
 ```ts
 requireCan({
@@ -149,3 +172,5 @@ requireCan({
   }),
 });
 ```
+
+`action` and `resourceType` accept a string or a function when they vary per request.

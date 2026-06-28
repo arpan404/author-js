@@ -37,7 +37,7 @@ export function mongodbStore(input: MongoStoreInput): AuthorStore {
   };
 }
 
-/** Creates recommended indexes for Author JS MongoDB collections. Safe to run during setup. */
+/** Creates recommended indexes for author.js MongoDB collections. Safe to run during setup. */
 export async function ensureMongoIndexes(input: MongoStoreInput): Promise<void> {
   const db = input.client.db(input.database);
   await Promise.all([

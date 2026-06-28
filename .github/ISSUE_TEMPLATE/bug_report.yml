@@ -19,7 +19,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Author JS version
+      label: author.js version
     validations:
       required: true
   - type: textarea

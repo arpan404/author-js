@@ -1,19 +1,15 @@
 # Contributing
 
-Thanks for helping improve Author JS.
-
-## Development
+## Setup
 
 ```bash
 bun install
 bun run check
 ```
 
-Use Bun for scripts and dependency management.
-
 ## Pull requests
 
-Keep changes focused. Include tests for behavior changes.
+Keep changes focused. Add tests for behavior changes.
 
 Before opening a PR:
 

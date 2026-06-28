@@ -1,32 +1,26 @@
 # React
 
-The React adapter helps you render UI based on authorization decisions.
-
-It should not be your security boundary. Always enforce permissions again on the backend before reading or changing protected data.
+Render UI based on authorization decisions. Pair with server-side enforcement for mutations and protected data.
 
 ## Provider
-
-Wrap the part of your app that needs permission checks.
 
 ```tsx
 import { AuthorProvider } from "author-js/react";
 
 <AuthorProvider authorization={author} entity={user}>
   <App />
-</AuthorProvider>;
+</AuthorProvider>
 ```
-
-Props:
 
 | Prop | Description |
 | --- | --- |
-| `authorization` | Author JS instance |
-| `entity` | default actor for child checks |
-| `mode` | defaults to `frontend` |
-| `context` | default context passed to child checks |
+| `authorization` | author.js instance |
+| `entity` | Default actor for child checks |
+| `mode` | Defaults to `frontend` |
+| `context` | Default context for child checks |
 | `children` | React children |
 
-Provider context is useful for values every check needs, such as tenant ID or rollout bucket:
+Set shared context once at the provider:
 
 ```tsx
 <AuthorProvider authorization={author} entity={user} context={{ tenantId }}>
@@ -36,17 +30,17 @@ Provider context is useful for values every check needs, such as tenant ID or ro
 
 ## Can
 
-Render children when the check is allowed.
+Render children when allowed.
 
 ```tsx
 import { Can } from "author-js/react";
 
 <Can do="update" on="Project" resource={project}>
   <EditButton />
-</Can>;
+</Can>
 ```
 
-Add a fallback for denied checks:
+With a fallback:
 
 ```tsx
 <Can
@@ -59,23 +53,25 @@ Add a fallback for denied checks:
 </Can>
 ```
 
-`Can` renders `null` while loading.
+Renders `null` while loading.
 
 ## Cannot
 
-Render children when the check is denied.
+Render children when denied.
 
 ```tsx
 import { Cannot } from "author-js/react";
 
 <Cannot do="delete" on="Project" resource={project}>
   <p>You cannot delete this project.</p>
-</Cannot>;
+</Cannot>
 ```
 
-## useCan
+## Hooks
 
-Use the hook when you need custom loading, error, or layout behavior.
+### useCan
+
+For custom loading, error, or layout behavior.
 
 ```tsx
 import { useCan } from "author-js/react";
@@ -95,7 +91,33 @@ function EditProjectButton({ project }: { project: Project }) {
 }
 ```
 
-Return shape:
+### useCannot
+
+Inverted `useCan`. When `allowed` is `true`, the actor is denied the action.
+
+```tsx
+import { useCannot } from "author-js/react";
+
+const { allowed: isDenied, loading } = useCannot({
+  do: "delete",
+  on: "Project",
+  resource: project,
+});
+
+if (isDenied) return <p>You cannot delete this project.</p>;
+```
+
+### useAuthor
+
+Read provider context directly.
+
+```tsx
+import { useAuthor } from "author-js/react";
+
+const { authorization, entity, mode, context } = useAuthor();
+```
+
+Hook return shape:
 
 ```ts
 type UseCanResult = {
@@ -108,7 +130,7 @@ type UseCanResult = {
 
 ## Entity override
 
-Use `i` when a check should run for a different actor than the provider default.
+Use `i` to check a different actor than the provider default.
 
 ```tsx
 <Can i={serviceAccount} do="read" on="Project" resource={project}>
@@ -118,7 +140,7 @@ Use `i` when a check should run for a different actor than the provider default.
 
 ## Context
 
-Pass request or UI context to policies. Component context is merged with provider context and overrides matching keys.
+Component context merges with provider context. Component keys override provider keys.
 
 ```tsx
 <Can
@@ -131,9 +153,10 @@ Pass request or UI context to policies. Component context is merged with provide
 </Can>
 ```
 
-## Practical guidance
+## Next.js client components
 
-- Use React checks to improve UX, not to protect data.
-- Keep frontend policies limited to data that is safe to expose in the browser.
-- Prefer disabled fallbacks when hiding the action would confuse users.
-- Use backend `.throw()` or framework middleware for real enforcement.
+Import from `author-js/next/client` in client components:
+
+```tsx
+import { AuthorProvider, Can } from "author-js/next/client";
+```

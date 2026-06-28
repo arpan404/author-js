@@ -1,4 +1,4 @@
-/** Describes how Author JS identifies an application entity, such as a user or service account. */
+/** Describes how author.js identifies an application entity, such as a user or service account. */
 export type EntityDefinition<T, Type extends string = string> = {
   /** Internal marker used to distinguish entity definitions from resources. */
   kind: "entity";

@@ -1,14 +1,14 @@
 # Publishing
 
-This repo publishes `author-js` to npm from GitHub Actions.
+author.js publishes to npm as `author-js` from GitHub Actions.
 
-## Required secret
+## Secret
 
-Add this repository secret:
+Repository secret required:
 
-- `NPM_TOKEN`: npm automation token with publish access
+- `NPM_TOKEN` — npm automation token with publish access
 
-## Release flow
+## Release
 
 1. Bump `package.json` version.
 2. Run checks locally:
@@ -24,4 +24,4 @@ Add this repository secret:
 
 ## Manual publish
 
-Use the `Publish to npm` workflow dispatch and choose an npm dist-tag, usually `latest`.
+Trigger the `Publish to npm` workflow and choose an npm dist-tag (usually `latest`).

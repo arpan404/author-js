@@ -1,5 +1,5 @@
 # Support
 
-For questions and usage help, open a GitHub discussion or issue.
+Open a GitHub discussion or issue for questions and usage help.
 
-For security issues, use `SECURITY.md` instead of public issues.
+For security issues, see [SECURITY.md](./SECURITY.md).

@@ -1,6 +1,6 @@
 import type { Decision } from "./types.js";
 
-/** Base error for all Author JS runtime failures. */
+/** Base error for all author.js runtime failures. */
 export class AuthorError extends Error {
   /** Stable machine-readable error code. */
   readonly code: string;
