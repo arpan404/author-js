@@ -111,8 +111,16 @@ export type ParentRef = { type: string; id: string; data?: unknown };
 export type ParentResolver = {
   /** Gets one named parent reference, or `null` when it does not exist. */
   get(name: string): Promise<ParentRef | null>;
+  /** Gets one named parent reference, or throws when it does not exist. */
+  getRequired(name: string): Promise<ParentRef>;
   /** Lists every configured parent reference for the current resource. */
   list(): Promise<Array<ParentRef & { name: string }>>;
+  /** Checks whether the current entity has a role scoped to the named parent. */
+  hasRole(role: string, parentName: string): Promise<boolean>;
+  /** Checks whether the current entity has a direct permission on the named parent. */
+  hasPermission(action: string, parentName: string): Promise<boolean>;
+  /** Checks whether the current entity has a relation to the named parent. */
+  hasRelation(relation: string, parentName: string): Promise<boolean>;
 };
 
 /** Rich result for one authorization check. */

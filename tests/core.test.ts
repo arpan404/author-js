@@ -36,10 +36,9 @@ function testAuthor(store = memoryStore()) {
       })),
       allow("entity relation can update", async (ctx: Ctx) => ctx.action === "update" && await ctx.entityHasRelation("owner")),
       allow("permission can delete", async (ctx: Ctx) => ctx.action === "delete" && await ctx.permissions.has("delete", { type: "Project", id: ctx.resource.id })),
-      allow("parent org role can read", async (ctx: Ctx) => {
-        const parent = await ctx.parents.get("organization");
-        return ctx.action === "read" && parent !== null && await ctx.roles.has("org-reader", parent);
-      }),
+      allow("parent org role can read", async (ctx: Ctx) => ctx.action === "read" && await ctx.parents.hasRole("org-reader", "organization")),
+      allow("parent permission can read", async (ctx: Ctx) => ctx.action === "read" && await ctx.parents.hasPermission("read", "organization")),
+      allow("parent relation can read", async (ctx: Ctx) => ctx.action === "read" && await ctx.parents.hasRelation("member", "organization")),
     ],
   });
 }
@@ -80,11 +79,40 @@ describe("core", () => {
     await store.createRelation({ subjectType: "User", subjectId: "owner", relation: "owner", objectType: "Project", objectId: project.id });
     await store.grantPermission({ entityType: "User", entityId: member.id, action: "delete", resourceType: "Project", resourceId: project.id, effect: "allow" });
     await store.grantRole({ entityType: "User", entityId: member.id, role: "org-reader", scopeType: "Organization", scopeId: "org_1" });
+    await store.grantPermission({ entityType: "User", entityId: member.id, action: "read", resourceType: "Organization", resourceId: "org_1", effect: "allow" });
+    await store.createRelation({ subjectType: "User", subjectId: member.id, relation: "member", objectType: "Organization", objectId: "org_1" });
 
     await expect(author.as(member).can("read").on("Project", project).allowed()).resolves.toBe(true);
     await expect(author.as(member).can("delete").on("Project", project).allowed()).resolves.toBe(false);
     await expect(author.as({ id: "other", role: "member" }).can("update").on("Project", { ...project, ownerId: "nope" }).allowed()).resolves.toBe(true);
     await expect(author.as({ id: "owner", role: "member" }).can("update").on("Project", { ...project, ownerId: "nope" }).allowed()).resolves.toBe(true);
+  });
+
+  test("parent permission deny overrides parent allow", async () => {
+    const store = memoryStore();
+    const author = createAuthor({
+      store,
+      entities: { User: UserEntity },
+      resources: { Project: ProjectResource },
+      policies: [allow("parent permission can read", async (ctx: Ctx) => ctx.parents.hasPermission("read", "organization"))],
+    });
+    await store.grantPermission({ entityType: "User", entityId: member.id, action: "read", resourceType: "Organization", resourceId: "org_1", effect: "allow" });
+    await store.grantPermission({ entityType: "User", entityId: member.id, action: "read", resourceType: "Organization", resourceId: "org_1", effect: "deny" });
+
+    await expect(author.as(member).can("read").on("Project", project).allowed()).resolves.toBe(false);
+  });
+
+  test("parent getRequired throws for missing parent", async () => {
+    const author = createAuthor({
+      entities: { User: UserEntity },
+      resources: { Project: ProjectResource },
+      policies: [allow("missing parent throws", async (ctx: Ctx) => {
+        await ctx.parents.getRequired("workspace");
+        return true;
+      })],
+    });
+
+    await expect(author.as(member).can("read").on("Project", project).explain()).rejects.toThrow("Missing parent resource: workspace");
   });
 
   test("list helpers expose store grants and parent refs", async () => {

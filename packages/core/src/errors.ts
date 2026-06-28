@@ -46,3 +46,11 @@ export class UnknownActionError extends AuthorError {
     this.name = "UnknownActionError";
   }
 }
+
+/** Thrown when a policy requires a parent resource that is not configured. */
+export class MissingParentResourceError extends AuthorError {
+  constructor(name: string) {
+    super("MISSING_PARENT_RESOURCE", `Missing parent resource: ${name}`);
+    this.name = "MissingParentResourceError";
+  }
+}

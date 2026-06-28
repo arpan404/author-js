@@ -87,6 +87,25 @@ await author.invalidate(); // clear adapter cache when supported
 
 Cache keys are SHA-256 hashed from length-delimited stable input parts and namespaced to avoid collisions.
 
+## Parent resources
+
+Parent checks are explicit policy helpers:
+
+```ts
+allow("org admin can update project", async (ctx) => {
+  if (ctx.resource.type !== "Project") return false;
+  return ctx.parents.hasRole("admin", "organization");
+});
+```
+
+Available helpers:
+
+- `ctx.parents.get(name)`
+- `ctx.parents.getRequired(name)`
+- `ctx.parents.hasRole(role, parentName)`
+- `ctx.parents.hasPermission(action, parentName)`
+- `ctx.parents.hasRelation(relation, parentName)`
+
 ## Docs
 
 - [Core concepts](./docs/core.md)

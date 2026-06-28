@@ -1,6 +1,6 @@
 import { decisionCacheKey, type AuthorCache } from "./cache.js";
 import type { EntityDefinition, ResourceDefinition } from "./definitions.js";
-import { AuthorizationDeniedError, UnknownActionError, UnknownEntityTypeError, UnknownResourceTypeError } from "./errors.js";
+import { AuthorizationDeniedError, MissingParentResourceError, UnknownActionError, UnknownEntityTypeError, UnknownResourceTypeError } from "./errors.js";
 import { normalizePolicyResult, type AuthorPolicyContext, type Policy } from "./policy.js";
 import { memoryStore } from "./memory-store.js";
 import type { AuthorStore, Decision, GetPermissionsInput, GetRolesInput, Mode, ParentRef, ParentResolver, PolicyEffect, ResourceInput, ScopeInput } from "./types.js";
@@ -276,7 +276,13 @@ function buildContext<CustomContext extends Record<string, unknown>>(input: {
   store: AuthorStore;
   resourceDefinition: ResourceDefinition<unknown, string, readonly string[]>;
 }): PolicyContext<EntityMap, ResourceMap, CustomContext> {
-  const parents = createParentResolver(input.resourceDefinition, input.resource);
+  const parents = createParentResolver({
+    definition: input.resourceDefinition,
+    resource: input.resource,
+    store: input.store,
+    entityType: input.entityType,
+    entityId: input.entityId,
+  });
   return {
     entity: input.entity,
     action: input.action,
@@ -326,18 +332,52 @@ function permissionQuery(entityType: string, entityId: string, resource: Resourc
     : { entityType, entityId, resourceType: resource.type, resourceId: resource.id };
 }
 
-function createParentResolver(definition: ResourceDefinition<unknown, string, readonly string[]>, resource: unknown): ParentResolver {
-  const parents = definition.parents ?? {};
+function createParentResolver(input: {
+  definition: ResourceDefinition<unknown, string, readonly string[]>;
+  resource: unknown;
+  store: AuthorStore;
+  entityType: string;
+  entityId: string;
+}): ParentResolver {
+  const parents = input.definition.parents ?? {};
   const resolve = (name: string): ParentRef | null => {
     const parent = parents[name];
-    return parent ? { type: parent.type, id: parent.id(resource) } : null;
+    return parent ? { type: parent.type, id: parent.id(input.resource) } : null;
+  };
+  const required = (name: string): ParentRef => {
+    const parent = resolve(name);
+    if (!parent) throw new MissingParentResourceError(name);
+    return parent;
   };
   return {
     async get(name) {
       return resolve(name);
     },
+    async getRequired(name) {
+      return required(name);
+    },
     async list() {
-      return Object.entries(parents).map(([name, parent]) => ({ name, type: parent.type, id: parent.id(resource) }));
+      return Object.entries(parents).map(([name, parent]) => ({ name, type: parent.type, id: parent.id(input.resource) }));
+    },
+    async hasRole(role, parentName) {
+      const parent = required(parentName);
+      const roles = await input.store.getRoles(roleQuery(input.entityType, input.entityId, parent));
+      return roles.some((grant) => grant.role === role);
+    },
+    async hasPermission(action, parentName) {
+      const parent = required(parentName);
+      const permissions = await input.store.getPermissions(permissionQuery(input.entityType, input.entityId, parent));
+      return !permissions.some((grant) => grant.action === action && grant.effect === "deny") && permissions.some((grant) => grant.action === action && grant.effect === "allow");
+    },
+    async hasRelation(relation, parentName) {
+      const parent = required(parentName);
+      return (await input.store.getRelations({
+        subjectType: input.entityType,
+        subjectId: input.entityId,
+        relation,
+        objectType: parent.type,
+        objectId: parent.id,
+      })).length > 0;
     },
   };
 }
