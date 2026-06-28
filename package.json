@@ -12,7 +12,12 @@
     "./core": "./packages/core/src/index.ts",
     "./postgres": "./packages/postgres/src/index.ts",
     "./mongodb": "./packages/mongodb/src/index.ts",
-    "./react": "./packages/react/src/index.ts"
+    "./react": "./packages/react/src/index.ts",
+    "./express": "./packages/express/src/index.ts",
+    "./hono": "./packages/hono/src/index.ts",
+    "./fastify": "./packages/fastify/src/index.ts",
+    "./next": "./packages/next/src/index.ts",
+    "./next/server": "./packages/next/src/server.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
