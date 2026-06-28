@@ -11,6 +11,8 @@ export function useCan(input: UseCanInput): UseCanResult {
   const author = useOptionalAuthor();
   const entity = input.i ?? author?.entity;
   const [state, setState] = useState<UseCanResult>({ allowed: false, loading: true, error: null, decision: null });
+  const resourceKey = stableKey(input.resource);
+  const contextKey = stableKey(input.context ?? {});
 
   useEffect(() => {
     let active = true;
@@ -38,9 +40,17 @@ export function useCan(input: UseCanInput): UseCanResult {
     });
 
     return () => { active = false; };
-  }, [author, entity, input.do, input.on, input.resource, input.context]);
+  }, [author, entity, input.do, input.on, resourceKey, contextKey]);
 
   return state;
+}
+
+function stableKey(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? "undefined";
+  } catch {
+    return String(value);
+  }
 }
 
 function fromDecision(decision: Decision): UseCanResult {
