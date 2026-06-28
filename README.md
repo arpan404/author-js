@@ -4,7 +4,7 @@
 [![npm](https://img.shields.io/npm/v/author-js.svg)](https://www.npmjs.com/package/author-js)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-Authorization engine for scoped policies, RBAC, ABAC, ReBAC, audit logging, and framework integrations.
+Unified authorization layer for frontend and backend applications with scoped policies, RBAC, ABAC, ReBAC, and audit logging.
 
 Write authorization as normal TypeScript policies, grouped into modules when your app grows:
 

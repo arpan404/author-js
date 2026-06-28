@@ -1,7 +1,7 @@
 {
   "name": "author-js",
   "version": "0.2.0",
-  "description": "Authorization engine for scoped policies, RBAC, ABAC, ReBAC, audit logging, and framework integrations.",
+  "description": "Unified authorization layer for frontend and backend applications with scoped policies, RBAC, ABAC, ReBAC, and audit logging.",
   "type": "module",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
