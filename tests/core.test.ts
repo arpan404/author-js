@@ -1,0 +1,83 @@
+import { describe, expect, test } from "bun:test";
+import { AuthorizationDeniedError, allow, createAuthor, defineEntity, defineResource, deny, memoryStore } from "../index";
+import type { AuthorPolicyContext } from "../index";
+
+type User = { id: string; role: "admin" | "member" };
+type Project = { id: string; ownerId: string; orgId?: string };
+type Ctx = AuthorPolicyContext<User, Project, Record<string, unknown>>;
+
+const UserEntity = defineEntity<User>()({ type: "User", id: (user) => user.id });
+const ProjectResource = defineResource<Project>()({
+  type: "Project",
+  id: (project) => project.id,
+  actions: ["read", "update", "delete"] as const,
+  parents: { organization: { type: "Organization", id: (project) => project.orgId ?? "org_1" } },
+});
+
+function testAuthor(store = memoryStore()) {
+  return createAuthor({
+    store,
+    entities: { User: UserEntity },
+    resources: { Project: ProjectResource },
+    policies: [
+      allow("admin can do anything", ({ entity }) => entity.role === "admin"),
+      allow("owner can update project", ({ entity, resource, action }) => {
+        if (resource.type !== "Project") return false;
+        return action === "update" && entity.id === resource.data.ownerId;
+      }),
+      deny("members cannot delete", ({ entity, action }) => entity.role === "member" && action === "delete"),
+      allow("role can read", async (ctx: Ctx) => ctx.action === "read" && await ctx.roles.has("reader")),
+      allow("relation can update", async (ctx: Ctx) => ctx.action === "update" && await ctx.relations.has({
+        subjectType: "User",
+        subjectId: ctx.entity.id,
+        relation: "editor",
+        objectType: "Project",
+        objectId: ctx.resource.id,
+      })),
+      allow("permission can delete", async (ctx: Ctx) => ctx.action === "delete" && await ctx.permissions.has("delete", { type: "Project", id: ctx.resource.id })),
+      allow("parent org role can read", async (ctx: Ctx) => {
+        const parent = await ctx.parents.get("organization");
+        return ctx.action === "read" && parent !== null && await ctx.roles.has("org-reader", parent);
+      }),
+    ],
+  });
+}
+
+const member = { id: "user_1", role: "member" } satisfies User;
+const admin = { id: "admin_1", role: "admin" } satisfies User;
+const project = { id: "project_1", ownerId: "user_1", orgId: "org_1" } satisfies Project;
+
+describe("core", () => {
+  test("first demo allows owner update", async () => {
+    await expect(testAuthor().as(member).can("update").on("Project", project).allowed()).resolves.toBe(true);
+  });
+
+  test("denies when no policy matches", async () => {
+    await expect(testAuthor().as(member).can("read").on("Project", project).allowed()).resolves.toBe(false);
+  });
+
+  test("deny overrides allow", async () => {
+    await expect(testAuthor().as(admin).can("delete").on("Project", project).allowed()).resolves.toBe(true);
+    await expect(testAuthor().as(member).can("delete").on("Project", project).allowed()).resolves.toBe(false);
+  });
+
+  test("explain and throw", async () => {
+    const decision = await testAuthor().as(member).can("update").on("Project", project).explain();
+    expect(decision.allowed).toBe(true);
+    expect(decision.matchedPolicies.map((policy) => policy.name)).toContain("owner can update project");
+    await expect(testAuthor().as(member).can("read").on("Project", project).throw()).rejects.toBeInstanceOf(AuthorizationDeniedError);
+  });
+
+  test("memory roles relations permissions and parents", async () => {
+    const store = memoryStore();
+    const author = testAuthor(store);
+    await store.grantRole({ entityType: "User", entityId: member.id, role: "reader" });
+    await store.createRelation({ subjectType: "User", subjectId: "other", relation: "editor", objectType: "Project", objectId: project.id });
+    await store.grantPermission({ entityType: "User", entityId: member.id, action: "delete", resourceType: "Project", resourceId: project.id, effect: "allow" });
+    await store.grantRole({ entityType: "User", entityId: member.id, role: "org-reader", scopeType: "Organization", scopeId: "org_1" });
+
+    await expect(author.as(member).can("read").on("Project", project).allowed()).resolves.toBe(true);
+    await expect(author.as(member).can("delete").on("Project", project).allowed()).resolves.toBe(false);
+    await expect(author.as({ id: "other", role: "member" }).can("update").on("Project", { ...project, ownerId: "nope" }).allowed()).resolves.toBe(true);
+  });
+});

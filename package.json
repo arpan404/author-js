@@ -1,0 +1,18 @@
+{
+  "name": "author-js",
+  "type": "module",
+  "module": "index.ts",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    ".": "./index.ts",
+    "./core": "./packages/core/src/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  }
+}

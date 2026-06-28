@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "skills": {
+    "typescript-best-practices": {
+      "source": "arpan404/skills",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": "typescript-best-practice/SKILL.md",
+      "computedHash": "663bec14df0c6787a52b4640e77929ae5ced75e3c233383efe7f4558390720d8"
+    }
+  }
+}
