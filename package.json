@@ -10,7 +10,8 @@
   "exports": {
     ".": "./index.ts",
     "./core": "./packages/core/src/index.ts",
-    "./postgres": "./packages/postgres/src/index.ts"
+    "./postgres": "./packages/postgres/src/index.ts",
+    "./mongodb": "./packages/mongodb/src/index.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

@@ -1,0 +1,7 @@
+{
+  "name": "@author-js/mongodb",
+  "type": "module",
+  "module": "src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "peerDependencies": { "@author-js/core": "workspace:*" }
+}
