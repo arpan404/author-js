@@ -4,11 +4,33 @@
 [![npm](https://img.shields.io/npm/v/author-js.svg)](https://www.npmjs.com/package/author-js)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-TypeScript-first authorization for frontend and backend apps.
+Author JS is a TypeScript-first authorization toolkit for apps that need one clear permission model across API routes, server actions, React UI, and database-backed grants.
 
-Author JS gives you one authorization model across your API, React UI, and database-backed permissions.
+It is built around a boring question:
 
-> Frontend authorization is only UX. Backend authorization is the real security boundary.
+> Can this entity do this action on this resource, right now?
+
+```ts
+const allowed = await author
+  .as(user)
+  .can("update")
+  .on("Project", project);
+```
+
+Frontend checks are useful for hiding buttons. Backend checks are the security boundary.
+
+## Why Author JS?
+
+Most SaaS apps outgrow simple `user.role === "admin"` checks. You eventually need:
+
+- RBAC: admins, owners, members, viewers
+- ABAC: ownership, visibility, tenant, IP, time, feature flags
+- ReBAC: user is owner/member/viewer of a specific object
+- parent checks: project belongs to organization, document belongs to folder
+- UI checks in React without duplicating backend logic
+- adapter-backed grants in PostgreSQL, MongoDB, Redis, or memory for tests
+
+Author JS keeps those as regular TypeScript policies instead of a separate policy language.
 
 ## Install
 
@@ -22,91 +44,125 @@ Optional adapters:
 bun add pg react
 ```
 
-## Basic usage
+## Quick start
 
 ```ts
 import { allow, createAuthor, defineEntity, defineResource } from "author-js";
 
-type User = { id: string; role: "admin" | "member" };
-type Project = { id: string; ownerId: string };
+type User = {
+  id: string;
+  role: "admin" | "member";
+};
 
-const author = createAuthor({
-  entities: {
-    User: defineEntity<User>()({ type: "User", id: (user) => user.id }),
-  },
-  resources: {
-    Project: defineResource<Project>()({
-      type: "Project",
-      id: (project) => project.id,
-      actions: ["read", "update", "delete"] as const,
-    }),
-  },
-  policies: [
-    allow("admin can do anything", ({ entity }) => entity.role === "admin"),
-    allow("owner can update project", ({ entity, resource, action }) =>
-      action === "update" && entity.id === resource.data.ownerId,
-    ),
-  ],
+type Project = {
+  id: string;
+  ownerId: string;
+  orgId: string;
+  visibility: "public" | "private";
+};
+
+const UserEntity = defineEntity<User>()({
+  type: "User",
+  id: (user) => user.id,
 });
 
-const allowed = await author
-  .as({ id: "user_1", role: "member" })
-  .can("update")
-  .on("Project", { id: "project_1", ownerId: "user_1" });
+const ProjectResource = defineResource<Project>()({
+  type: "Project",
+  id: (project) => project.id,
+  actions: ["read", "update", "delete"] as const,
+  parents: {
+    organization: {
+      type: "Organization",
+      id: (project) => project.orgId,
+    },
+  },
+});
+
+export const author = createAuthor({
+  entities: { User: UserEntity },
+  resources: { Project: ProjectResource },
+  policies: [
+    allow("admins can do anything", ({ entity }) => entity.role === "admin"),
+
+    allow("owners can update their projects", ({ entity, resource, action }) => {
+      if (resource.type !== "Project") return false;
+      return action === "update" && entity.id === resource.data.ownerId;
+    }),
+
+    allow("organization admins can update projects", async (ctx) => {
+      if (ctx.resource.type !== "Project") return false;
+      if (ctx.action !== "update") return false;
+      return ctx.parents.hasRole("admin", "organization");
+    }),
+  ],
+});
 ```
 
-## Packages
+Use it in backend code:
+
+```ts
+await author.as(user).can("update").on("Project", project).throw();
+// continue only when allowed
+```
+
+Use it in UI code:
+
+```tsx
+import { AuthorProvider, Can } from "author-js/react";
+
+<AuthorProvider authorization={author} entity={user}>
+  <Can do="update" on="Project" resource={project}>
+    <EditButton />
+  </Can>
+</AuthorProvider>;
+```
+
+## Decisions, not just booleans
+
+```ts
+const decision = await author
+  .as(user)
+  .can("update")
+  .on("Project", project)
+  .explain();
+
+console.log(decision.allowed);
+console.log(decision.reason);
+console.log(decision.matchedPolicies);
+```
+
+Rules are evaluated with deny-overrides-allow semantics:
+
+1. run all policies
+2. any matching deny wins
+3. otherwise any matching allow wins
+4. otherwise deny by default
+
+## Imports
+
+```ts
+import { createAuthor } from "author-js";
+import { postgresStore } from "author-js/postgres";
+import { mongodbStore } from "author-js/mongodb";
+import { redisCache } from "author-js/redis";
+import { AuthorProvider, Can } from "author-js/react";
+import { requireCan } from "author-js/express";
+```
+
+Available entrypoints:
 
 - `author-js` / `author-js/core`
 - `author-js/postgres`
 - `author-js/mongodb`
+- `author-js/redis`
 - `author-js/react`
 - `author-js/express`
 - `author-js/hono`
 - `author-js/fastify`
 - `author-js/elysia`
 - `author-js/next`
-- `author-js/redis`
 
-## Caching
-
-```ts
-import { createAuthor, memoryCache } from "author-js";
-import { redisCache } from "author-js/redis";
-
-const author = createAuthor({
-  cache: redisCache({ client: Bun.redis, prefix: "my-app-auth" }),
-  cacheTtlMs: 30_000,
-  entities,
-  resources,
-  policies,
-});
-
-await author.invalidate(); // clear adapter cache when supported
-```
-
-Cache keys are SHA-256 hashed from length-delimited stable input parts and namespaced to avoid collisions.
-
-## Parent resources
-
-Parent checks are explicit policy helpers:
-
-```ts
-allow("org admin can update project", async (ctx) => {
-  if (ctx.resource.type !== "Project") return false;
-  return ctx.parents.hasRole("admin", "organization");
-});
-```
-
-Available helpers:
-
-- `ctx.parents.get(name)`
-- `ctx.parents.getRequired(name)`
-- `ctx.parents.hasRole(role, parentName)`
-- `ctx.parents.hasPermission(action, parentName)`
-- `ctx.parents.hasRelation(relation, parentName)`
-
-## Docs
+## Documentation
 
 - [Core concepts](./docs/core.md)
 - [Store and cache adapters](./docs/adapters.md)

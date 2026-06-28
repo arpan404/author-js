@@ -1,69 +1,180 @@
 # Store and cache adapters
 
-Core only depends on adapter interfaces. Use stores for authorization data and caches for decision caching.
+Author JS has two adapter concepts:
 
-## Memory
+- **stores** keep authorization data: roles, permissions, relations, audit logs
+- **caches** keep evaluated decisions for a short time
+
+Core only depends on interfaces, so apps can bring their own database clients.
+
+## Memory store
+
+Use the memory store for tests, examples, and local prototypes.
 
 ```ts
 import { memoryStore } from "author-js";
 
 const store = memoryStore();
-await store.grantRole({ entityType: "User", entityId: "u1", role: "admin" });
+
+await store.grantRole({
+  entityType: "User",
+  entityId: "user_1",
+  role: "admin",
+  scopeType: "Organization",
+  scopeId: "org_1",
+});
 ```
 
-## PostgreSQL
+The memory store is process-local. It is not for production persistence.
+
+## PostgreSQL store
+
+Use PostgreSQL when your app already stores authorization grants in Postgres.
 
 ```ts
 import { postgresStore } from "author-js/postgres";
 
-const store = postgresStore({ connectionString: process.env.DATABASE_URL });
+const store = postgresStore({
+  connectionString: process.env.DATABASE_URL,
+});
 ```
 
-Schema is exported as:
+Or pass a pg-compatible client:
 
 ```ts
-import "author-js/postgres/schema.sql";
+const store = postgresStore({ client });
 ```
 
-Or read it from `node_modules/author-js/dist/packages/postgres/src/schema.sql`.
+The schema is exported in the package:
 
-## MongoDB
+```txt
+author-js/postgres/schema.sql
+```
+
+It creates four tables:
+
+- `author_roles`
+- `author_permissions`
+- `author_relations`
+- `author_audit_logs`
+
+Do not import `author-js/postgres` in edge runtimes. The `pg` package is Node-only.
+
+## MongoDB store
 
 ```ts
 import { ensureMongoIndexes, mongodbStore } from "author-js/mongodb";
 
-const store = mongodbStore({ client, database: "my_app" });
+const store = mongodbStore({
+  client,
+  database: "my_app",
+});
+
 await ensureMongoIndexes({ client, database: "my_app" });
 ```
 
+Mongo collections:
+
+- `author_roles`
+- `author_permissions`
+- `author_relations`
+- `author_audit_logs`
+
+Run `ensureMongoIndexes` during setup or migration time, not on every request.
+
 ## Audit logs
 
-Every adapter can implement `writeAuditLog`. The core engine calls it after each decision when available.
+If a store implements `writeAuditLog`, the engine calls it after each decision.
+
+Audit logs are useful for:
+
+- debugging why access was granted
+- answering compliance questions
+- showing support/admin tooling
+
+Keep in mind that high-volume apps may want to sample logs or write them asynchronously in a custom store.
 
 ## Decision caching
 
-Use `memoryCache` for tests or `redisCache` for backend caching.
+Decision caching is optional. It is best for backend checks that are repeated frequently and where a short TTL is acceptable.
 
 ```ts
-import { createAuthor, decisionCacheKey, memoryCache } from "author-js";
+import { createAuthor, memoryCache } from "author-js";
+
+const author = createAuthor({
+  cache: memoryCache(),
+  cacheTtlMs: 30_000,
+  entities,
+  resources,
+  policies,
+});
+```
+
+### Redis cache
+
+```ts
 import { redisCache } from "author-js/redis";
 
-const cache = redisCache({ client: Bun.redis, prefix: "my-app-auth" });
-const author = createAuthor({ cache, cacheTtlMs: 30_000, entities, resources, policies });
+const author = createAuthor({
+  cache: redisCache({
+    client: Bun.redis,
+    prefix: "my-app-auth",
+  }),
+  cacheTtlMs: 30_000,
+  entities,
+  resources,
+  policies,
+});
+```
 
+The Redis adapter expects a small Redis-like client with `get`, `set`, and `del`.
+
+### Cache invalidation
+
+Clear the cache through the author instance:
+
+```ts
 await author.invalidate();
+```
+
+Or delete a known key directly from the adapter:
+
+```ts
+import { decisionCacheKey } from "author-js";
 
 const key = await decisionCacheKey({
   entityType: "User",
-  entityId: "u1",
+  entityId: "user_1",
   action: "read",
   resourceType: "Project",
-  resourceId: "p1",
+  resourceId: "project_1",
   mode: "backend",
   context: {},
-  resource: { id: "p1" },
+  resource: project,
 });
+
 await cache.delete(key);
 ```
 
-Cache keys are namespaced and SHA-256 hashed from length-delimited stable input parts to avoid collisions.
+### Collision avoidance
+
+Cache keys are not naive string concatenations. They are built from:
+
+- namespace
+- entity type and ID
+- action
+- resource type and ID
+- mode
+- stable JSON context
+- stable JSON resource snapshot
+
+Those parts are length-delimited and hashed with SHA-256. This avoids accidental collisions such as `("A", "bc")` and `("Ab", "c")` producing the same key.
+
+### When not to cache
+
+Do not cache decisions for long periods when permissions change frequently. Prefer short TTLs and invalidate after writes like:
+
+- role grant/revoke
+- permission grant/revoke
+- relation create/delete
+- user tenant change
