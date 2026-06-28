@@ -1,12 +1,12 @@
 # React
 
-The React adapter is for UI decisions: hiding buttons, showing fallbacks, and keeping screens consistent with your permission model.
+The React adapter helps you render UI based on authorization decisions.
 
-It is not a security boundary. Always enforce the same action on the backend before returning protected data or mutating state.
+It should not be your security boundary. Always enforce permissions again on the backend before reading or changing protected data.
 
 ## Provider
 
-Wrap the part of your app that needs permission checks:
+Wrap the part of your app that needs permission checks.
 
 ```tsx
 import { AuthorProvider } from "author-js/react";
@@ -16,15 +16,18 @@ import { AuthorProvider } from "author-js/react";
 </AuthorProvider>;
 ```
 
-The provider accepts:
+Props:
 
-- `authorization`: an Author JS instance
-- `entity`: default actor for checks
-- `mode`: defaults to `frontend`
+| Prop | Description |
+| --- | --- |
+| `authorization` | Author JS instance |
+| `entity` | default actor for child checks |
+| `mode` | defaults to `frontend` |
+| `children` | React children |
 
 ## Can
 
-Render children when the check allows:
+Render children when the check is allowed.
 
 ```tsx
 import { Can } from "author-js/react";
@@ -34,7 +37,7 @@ import { Can } from "author-js/react";
 </Can>;
 ```
 
-Render a fallback when denied:
+Add a fallback for denied checks:
 
 ```tsx
 <Can
@@ -47,11 +50,11 @@ Render a fallback when denied:
 </Can>
 ```
 
-While loading, `Can` renders `null`.
+`Can` renders `null` while loading.
 
 ## Cannot
 
-Render children when the check denies:
+Render children when the check is denied.
 
 ```tsx
 import { Cannot } from "author-js/react";
@@ -69,15 +72,15 @@ Use the hook when you need custom loading, error, or layout behavior.
 import { useCan } from "author-js/react";
 
 function EditProjectButton({ project }: { project: Project }) {
-  const result = useCan({
+  const permission = useCan({
     do: "update",
     on: "Project",
     resource: project,
   });
 
-  if (result.loading) return null;
-  if (result.error) return <span>Could not check permissions</span>;
-  if (!result.allowed) return null;
+  if (permission.loading) return null;
+  if (permission.error) return <span>Could not check permissions</span>;
+  if (!permission.allowed) return null;
 
   return <EditButton />;
 }
@@ -96,7 +99,7 @@ type UseCanResult = {
 
 ## Entity override
 
-Use `i` to check permissions for a different entity than the provider default:
+Use `i` when a check should run for a different actor than the provider default.
 
 ```tsx
 <Can i={serviceAccount} do="read" on="Project" resource={project}>
@@ -106,22 +109,22 @@ Use `i` to check permissions for a different entity than the provider default:
 
 ## Context
 
-Pass additional policy context:
+Pass request or UI context to policies.
 
 ```tsx
 <Can
   do="read"
   on="Report"
   resource={report}
-  context={{ ip: clientIp, tenantId }}
+  context={{ tenantId, rollout: "beta" }}
 >
   <ReportPreview />
 </Can>
 ```
 
-## Practical advice
+## Practical guidance
 
-- Use React checks for UX only.
-- Keep frontend policies limited to data that is safe to expose.
-- Prefer backend checks for anything sensitive.
-- Use fallbacks for disabled states when hiding UI would be confusing.
+- Use React checks to improve UX, not to protect data.
+- Keep frontend policies limited to data that is safe to expose in the browser.
+- Prefer disabled fallbacks when hiding the action would confuse users.
+- Use backend `.throw()` or framework middleware for real enforcement.

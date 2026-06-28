@@ -1,15 +1,17 @@
-# Store and cache adapters
+# Adapters
 
-Author JS has two adapter concepts:
+Author JS keeps persistence and caching behind small interfaces.
 
-- **stores** keep authorization data: roles, permissions, relations, audit logs
-- **caches** keep evaluated decisions for a short time
+- **Stores** persist authorization data: roles, permissions, relations, and audit logs.
+- **Caches** store evaluated decisions for a short time.
 
-Core only depends on interfaces, so apps can bring their own database clients.
+Use only the adapters your app needs.
 
-## Memory store
+## Stores
 
-Use the memory store for tests, examples, and local prototypes.
+### Memory
+
+Use memory for tests and local examples.
 
 ```ts
 import { memoryStore } from "author-js";
@@ -25,11 +27,9 @@ await store.grantRole({
 });
 ```
 
-The memory store is process-local. It is not for production persistence.
+Memory data is process-local and disappears when the process exits.
 
-## PostgreSQL store
-
-Use PostgreSQL when your app already stores authorization grants in Postgres.
+### PostgreSQL
 
 ```ts
 import { postgresStore } from "author-js/postgres";
@@ -39,28 +39,28 @@ const store = postgresStore({
 });
 ```
 
-Or pass a pg-compatible client:
+You can also pass an existing pg-compatible client:
 
 ```ts
 const store = postgresStore({ client });
 ```
 
-The schema is exported in the package:
+The SQL schema is published with the package:
 
 ```txt
 author-js/postgres/schema.sql
 ```
 
-It creates four tables:
+It creates:
 
 - `author_roles`
 - `author_permissions`
 - `author_relations`
 - `author_audit_logs`
 
-Do not import `author-js/postgres` in edge runtimes. The `pg` package is Node-only.
+`author-js/postgres` uses `pg`, so keep it out of edge runtimes.
 
-## MongoDB store
+### MongoDB
 
 ```ts
 import { ensureMongoIndexes, mongodbStore } from "author-js/mongodb";
@@ -73,6 +73,8 @@ const store = mongodbStore({
 await ensureMongoIndexes({ client, database: "my_app" });
 ```
 
+Run `ensureMongoIndexes` during setup or migrations, not during every request.
+
 Mongo collections:
 
 - `author_roles`
@@ -80,23 +82,21 @@ Mongo collections:
 - `author_relations`
 - `author_audit_logs`
 
-Run `ensureMongoIndexes` during setup or migration time, not on every request.
-
 ## Audit logs
 
-If a store implements `writeAuditLog`, the engine calls it after each decision.
+If the store implements `writeAuditLog`, Author JS calls it after each decision.
 
-Audit logs are useful for:
+Audit logs help answer:
 
-- debugging why access was granted
-- answering compliance questions
-- showing support/admin tooling
+- why was this action allowed?
+- which policy matched?
+- who accessed this resource?
 
-Keep in mind that high-volume apps may want to sample logs or write them asynchronously in a custom store.
+For high-volume apps, consider a custom store that queues or samples audit writes.
 
 ## Decision caching
 
-Decision caching is optional. It is best for backend checks that are repeated frequently and where a short TTL is acceptable.
+Decision caching is optional. It is useful when the same backend check runs many times in a short period.
 
 ```ts
 import { createAuthor, memoryCache } from "author-js";
@@ -110,16 +110,18 @@ const author = createAuthor({
 });
 ```
 
-### Redis cache
+### Redis
 
 ```ts
 import { redisCache } from "author-js/redis";
 
+const cache = redisCache({
+  client: Bun.redis,
+  prefix: "my-app-auth",
+});
+
 const author = createAuthor({
-  cache: redisCache({
-    client: Bun.redis,
-    prefix: "my-app-auth",
-  }),
+  cache,
   cacheTtlMs: 30_000,
   entities,
   resources,
@@ -127,17 +129,17 @@ const author = createAuthor({
 });
 ```
 
-The Redis adapter expects a small Redis-like client with `get`, `set`, and `del`.
+The Redis adapter accepts a minimal client with `get`, `set`, and `del`, so it works with Redis-like clients without coupling Author JS to one Redis package.
 
-### Cache invalidation
+### Invalidation
 
-Clear the cache through the author instance:
+Clear through the author instance when the cache supports it:
 
 ```ts
 await author.invalidate();
 ```
 
-Or delete a known key directly from the adapter:
+Delete a specific key when you have one:
 
 ```ts
 import { decisionCacheKey } from "author-js";
@@ -156,25 +158,25 @@ const key = await decisionCacheKey({
 await cache.delete(key);
 ```
 
-### Collision avoidance
+Invalidate after changes that affect authorization:
 
-Cache keys are not naive string concatenations. They are built from:
+- role grant or revoke
+- permission grant or revoke
+- relation create or delete
+- plan change
+- tenant or ownership change
 
-- namespace
+### Cache key safety
+
+Cache keys are namespaced and SHA-256 hashed. The input parts are length-delimited before hashing, so similar strings cannot accidentally collapse into the same key.
+
+The key includes:
+
 - entity type and ID
 - action
 - resource type and ID
 - mode
-- stable JSON context
-- stable JSON resource snapshot
+- context
+- resource snapshot
 
-Those parts are length-delimited and hashed with SHA-256. This avoids accidental collisions such as `("A", "bc")` and `("Ab", "c")` producing the same key.
-
-### When not to cache
-
-Do not cache decisions for long periods when permissions change frequently. Prefer short TTLs and invalidate after writes like:
-
-- role grant/revoke
-- permission grant/revoke
-- relation create/delete
-- user tenant change
+Use short TTLs for permission-sensitive applications.

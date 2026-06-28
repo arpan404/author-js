@@ -1,14 +1,15 @@
-# Framework adapters
+# Frameworks
 
-Framework adapters help put authorization at the edge of your backend routes.
+Framework adapters put authorization at your backend route boundary.
 
-The pattern is the same everywhere:
+Every adapter follows the same shape:
 
 1. resolve the entity from the request
-2. resolve the action
-3. load the resource from your database
-4. call Author JS
-5. stop with 403 if denied
+2. load the actual resource from your database
+3. evaluate Author JS
+4. return 403 when denied
+
+Always authorize against the loaded resource, not only route params. The loaded resource contains ownership, tenant, visibility, parent IDs, and other attributes your policies need.
 
 ## Express
 
@@ -22,11 +23,7 @@ app.patch(
     entity: (req) => req.user,
     action: "update",
     resourceType: "Project",
-    resource: async (req) => {
-      return db.project.findUniqueOrThrow({
-        where: { id: req.params.id },
-      });
-    },
+    resource: (req) => db.project.findUniqueOrThrow({ where: { id: req.params.id } }),
     context: (req) => ({ ip: req.ip }),
   }),
   async (req, res) => {
@@ -53,9 +50,9 @@ app.patch(
     entity: (c) => c.get("user"),
     action: "update",
     resourceType: "Project",
-    resource: async (c) => loadProject(c.req.param("id")),
+    resource: (c) => loadProject(c.req.param("id")),
   }),
-  async (c) => c.json({ ok: true }),
+  (c) => c.json({ ok: true }),
 );
 ```
 
@@ -72,7 +69,7 @@ fastify.patch(
       entity: (request) => request.user,
       action: "update",
       resourceType: "Project",
-      resource: async (request) => loadProject(request.params.id),
+      resource: (request) => loadProject(request.params.id),
     }),
   },
   async () => ({ ok: true }),
@@ -94,7 +91,7 @@ new Elysia().patch(
       entity: (ctx) => ctx.user,
       action: "update",
       resourceType: "Project",
-      resource: async (ctx) => loadProject(ctx.params.id),
+      resource: (ctx) => loadProject(ctx.params.id),
     }),
   },
 );
@@ -113,7 +110,10 @@ Use `assertCan` in route handlers, server actions, and server components.
 ```ts
 import { assertCan } from "author-js/next/server";
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(
+  request: Request,
+  { params }: { params: { id: string } },
+) {
   const user = await getCurrentUser();
   const project = await loadProject(params.id);
 
@@ -130,8 +130,22 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 }
 ```
 
-`assertCan` throws `AuthorizationDeniedError` when denied. Map that to a 403 in your framework error handler.
+`assertCan` throws `AuthorizationDeniedError` when denied. Convert that error to a 403 response in your app error handler.
 
-## Loading resources
+## Passing usage and request data
 
-Always authorize against the actual resource from your database, not just route params. Route params tell you what the user asked for; the loaded resource tells you owner, tenant, visibility, parent IDs, and other attributes needed by policies.
+Adapters accept a `context` function. Use it for values policies need but resources do not contain.
+
+```ts
+requireCan({
+  author,
+  entity: (req) => req.user,
+  action: "create",
+  resourceType: "Project",
+  resource: (req) => req.organization,
+  context: async (req) => ({
+    projectCount: await countProjects(req.user.id),
+    ip: req.ip,
+  }),
+});
+```
