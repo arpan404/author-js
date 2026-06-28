@@ -37,7 +37,7 @@ type EvaluateInput<CustomContext extends Record<string, unknown>> = {
   mode: Mode;
 };
 
-export type ResourceDecisionBuilder = {
+export type ResourceDecisionBuilder = PromiseLike<boolean> & {
   allowed(): Promise<boolean>;
   denied(): Promise<boolean>;
   explain(): Promise<Decision>;
@@ -159,8 +159,10 @@ function emptyContext<CustomContext extends Record<string, unknown>>(): CustomCo
 }
 
 function decisionBuilder(run: () => Promise<Decision>): ResourceDecisionBuilder {
+  const allowed = async () => (await run()).allowed;
   return {
-    allowed: async () => (await run()).allowed,
+    then: (onFulfilled, onRejected) => allowed().then(onFulfilled, onRejected),
+    allowed,
     denied: async () => !(await run()).allowed,
     explain: run,
     throw: async () => {

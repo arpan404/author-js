@@ -53,6 +53,7 @@ describe("core", () => {
   test("first demo allows owner update", async () => {
     await expect(testAuthor().as(member).can("update").on("Project", project).allowed()).resolves.toBe(true);
     await expect(testAuthor().as(member).can("update").on(typedProject).allowed()).resolves.toBe(true);
+    expect(await testAuthor().as(member).can("update").on(typedProject)).toBe(true);
   });
 
   test("denies when no policy matches", async () => {

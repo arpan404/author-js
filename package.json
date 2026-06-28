@@ -17,7 +17,8 @@
     "./hono": "./packages/hono/src/index.ts",
     "./fastify": "./packages/fastify/src/index.ts",
     "./next": "./packages/next/src/index.ts",
-    "./next/server": "./packages/next/src/server.ts"
+    "./next/server": "./packages/next/src/server.ts",
+    "./next/client": "./packages/next/src/client.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
