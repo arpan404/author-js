@@ -1,29 +1,19 @@
 ---
 name: author-js
-description: Build, review, or refactor authorization using author.js. Use when adding policies, entities, resources, roles, permissions, relations, parent-resource checks, subscription entitlements, framework middleware, React authorization UI, stores, caching, tests, or migrations for the author.js TypeScript authorization framework.
+description: Use author.js inside an application. Load when an AI agent is adding authorization to a product, defining app entities/resources/policies, wiring backend route protection, rendering React/Next.js permission-aware UI, using PostgreSQL/MongoDB stores, Redis decision caching, roles, permissions, relations, parent checks, subscription entitlements, or tests.
 ---
 
-# author.js
+# author.js app integration skill
 
-Use this skill for any app using author.js, the TypeScript-first authorization framework.
+You are helping build an application that uses author.js. Do not act like you are maintaining author.js itself unless the user explicitly says they are editing the framework repo.
 
-## Canonical docs
+Your job: add the smallest correct authorization layer to the app, using author.js APIs and the app's existing stack.
 
-Prefer local docs when available in the repo. If missing or stale, look up the GitHub docs.
+## Look up docs when needed
 
-Local paths:
+If this project has author.js docs checked in, read them first. Most app repos will not, so use the GitHub docs below when details are needed.
 
-- `README.md`
-- `docs/README.md`
-- `docs/core.md`
-- `docs/management.md`
-- `docs/adapters.md`
-- `docs/react.md`
-- `docs/frameworks.md`
-- `docs/testing.md`
-- `docs/publishing.md`
-
-GitHub docs:
+Primary docs:
 
 - Overview: https://github.com/arpan404/author-js#readme
 - Docs index: https://github.com/arpan404/author-js/blob/main/docs/README.md
@@ -33,32 +23,72 @@ GitHub docs:
 - React: https://github.com/arpan404/author-js/blob/main/docs/react.md
 - Frameworks: https://github.com/arpan404/author-js/blob/main/docs/frameworks.md
 - Testing: https://github.com/arpan404/author-js/blob/main/docs/testing.md
-- Publishing: https://github.com/arpan404/author-js/blob/main/docs/publishing.md
-- Source: https://github.com/arpan404/author-js
 - npm: https://www.npmjs.com/package/author-js
+- Source: https://github.com/arpan404/author-js
+
+Use internet/GitHub lookup when:
+
+- an API shape is uncertain
+- the installed author.js version differs from docs
+- framework adapter syntax is needed
+- migrations/schema details are needed
+- peer dependency requirements are unclear
+
+## First inspect the app
+
+Before writing code, identify:
+
+1. package manager and runtime (`bun`, npm, pnpm, yarn)
+2. framework: Next.js, React SPA, Express, Hono, Fastify, Elysia, etc.
+3. auth provider/session shape: Clerk, NextAuth, custom JWT, database session, etc.
+4. data model: user/account/org/project/document/resource IDs
+5. persistence: PostgreSQL, MongoDB, SQLite, in-memory, etc.
+6. where backend mutations happen
+7. where UI should hide/show actions
+
+Do not create a huge architecture. Add one central author module and wire it where needed.
 
 ## Install
+
+Use the app's package manager. If the app uses Bun:
 
 ```bash
 bun add author-js
 ```
 
-Add adapter peer dependencies only when used:
+Add adapter peer dependencies only when actually used:
 
 ```bash
 bun add pg mongodb redis react
 ```
 
-Use Bun commands. Do not use npm, pnpm, yarn, or Vite unless the project already requires them.
+Do not add Redis, PostgreSQL, MongoDB, React, or framework adapters unless the app already uses them or the user asked for them.
 
-## Core pattern
+## Recommended app file layout
+
+Use existing conventions. If none exist, keep it boring:
+
+```txt
+src/authorization/author.ts      # entities, resources, policies, createAuthor
+src/authorization/current-user.ts # optional session -> app user mapping
+```
+
+For Next.js, this is also fine:
+
+```txt
+src/lib/author.ts
+```
+
+One file is enough until it becomes painful.
+
+## Core app pattern
 
 ```ts
 import { allow, createAuthor, defineContext, defineEntity, defineResource } from "author-js";
 
 type User = { id: string; role: "admin" | "member" };
 type Project = { id: string; ownerId: string; organizationId: string };
-type AuthContext = { organizationId: string };
+type AuthContext = { organizationId?: string };
 
 const UserEntity = defineEntity<User>()({
   type: "User",
@@ -79,42 +109,98 @@ export const author = createAuthor({
   resources: { Project: ProjectResource },
   policies: [
     allow("admins can do anything", ({ entity }) => entity.role === "admin"),
-    allow("owners can update projects", ({ entity, resource, action }) => {
+    allow("project owners can update projects", ({ entity, resource, action }) => {
       if (resource.type !== "Project") return false;
       return action === "update" && resource.data.ownerId === entity.id;
     }),
   ],
 });
+```
 
+Use it at the backend boundary:
+
+```ts
 await author.as("User", user).can("update").on("Project", project).throw();
 ```
 
-## Design rules
+## Design rules for app agents
 
-- Model real product concepts: `User`, `Organization`, `Project`, `Document`; not generic `Thing`.
-- Require explicit entity/resource types: `author.as("User", user).can("read").on("Project", project)`.
-- Keep authorization centralized. Do not scatter ad-hoc `if (user.role...)` checks through routes/components.
-- Use named policies. Policy names should explain the business rule.
-- Put broad denies before broad allows only when deny semantics are intentional. `deny` overrides `allow`.
-- Prefer small policies over one giant policy function.
-- Use TypeScript discriminated checks: inspect `resource.type` before reading `resource.data` fields.
-- Do not use `any`. Define entity, resource, and context types.
-- Treat backend checks as authoritative. UI checks are for rendering only.
-- Add the smallest test that proves the policy behavior.
+- Protect backend mutations first. UI checks are convenience, not security.
+- Model product words: `User`, `Organization`, `Project`, `Document`; not `Thing` or `Object`.
+- Use explicit entity/resource types: `author.as("User", user).can("read").on("Project", project)`.
+- Keep policies centralized. Do not scatter `if (user.role === ...)` through routes.
+- Name policies as business rules.
+- Prefer a few small policies over one giant policy.
+- Check `resource.type` before reading `resource.data` fields.
+- Use typed context with `defineContext<T>()` for request/session data.
+- Avoid `any`. Match the app's existing model types where possible.
+- Do not invent admin panels, migrations, wrappers, or service classes unless needed.
+- Add one focused test for each new rule.
 
-## When to use each model
+## Choose the simplest authorization model
 
-- RBAC: stable roles like `admin`, `member`, `billing_admin`.
-- ABAC: object attributes like owner, status, visibility, region, or plan.
-- ReBAC: relationships like owner/member/viewer across resources.
-- Parent checks: inheritance from an organization, workspace, folder, or account.
-- Entitlements: plan features, limits, quota, and subscription gates.
+Use the first model that fits:
 
-Combine them when needed, but do not add a model before the product needs it.
+- Owner check: `resource.ownerId === user.id`
+- RBAC: roles like `admin`, `member`, `billing_admin`
+- ABAC: attributes like status, visibility, tenant, plan, region
+- ReBAC: user-resource relations like owner/member/viewer
+- Parent checks: permissions inherited from organization/workspace/folder/account
+- Entitlements: features, plan limits, subscription gates
 
-## Management API
+Do not implement all models “for later”.
 
-Use management helpers for admin screens, setup scripts, and tests:
+## Stores and caching
+
+Default for tests/simple apps:
+
+```ts
+import { memoryStore } from "author-js";
+```
+
+PostgreSQL persistence:
+
+```ts
+import { postgresStore } from "author-js/postgres";
+
+const store = postgresStore({ connectionString: process.env.POSTGRES_URL! });
+```
+
+MongoDB persistence:
+
+```ts
+import { mongodbStore } from "author-js/mongodb";
+```
+
+Redis decision cache:
+
+```ts
+import { redisCache } from "author-js/redis";
+```
+
+PostgreSQL + Redis is a normal production setup:
+
+```ts
+export const author = createAuthor({
+  entities,
+  resources,
+  policies,
+  store: postgresStore({ connectionString: process.env.POSTGRES_URL! }),
+  cache: redisCache({ url: process.env.REDIS_URL!, prefix: "author:" }),
+  cacheTtlMs: 30_000,
+});
+```
+
+Use:
+
+- PostgreSQL/MongoDB for persisted roles, permissions, relations, audit logs
+- Redis for hot decision caching across app instances
+
+Do not add Redis until there is a real cache need or the user requests it.
+
+## Management API for app admin features
+
+Use management helpers for settings pages, admin tools, seed scripts, and tests:
 
 ```ts
 await author.roles.grant({
@@ -143,11 +229,11 @@ await author.relations.create({
 });
 ```
 
-Use these instead of writing directly to adapter tables/collections unless doing a migration.
+Prefer these helpers over raw adapter writes.
 
 ## Parent checks
 
-Use parent helpers inside policies when permissions inherit from a parent resource:
+Use parent helpers when child resources inherit access from an organization, workspace, folder, or account:
 
 ```ts
 allow("organization admins can update projects", async (ctx) => {
@@ -161,16 +247,16 @@ allow("organization admins can update projects", async (ctx) => {
 });
 ```
 
-Available helpers:
+Helpers:
 
 - `ctx.parents.getRequired`
 - `ctx.parents.hasRole`
 - `ctx.parents.hasPermission`
 - `ctx.parents.hasRelation`
 
-## Entitlements
+## Entitlements and subscriptions
 
-Use subscription helpers for plan-aware authorization:
+Use subscription helpers for paid features and quotas:
 
 ```ts
 allow("paid plans can export", async (ctx) => {
@@ -178,12 +264,12 @@ allow("paid plans can export", async (ctx) => {
   return ctx.features.has("project_export");
 });
 
-allow("within project limit", async (ctx) => {
+allow("workspace is within project limit", async (ctx) => {
   return ctx.limits.within("projects", 1);
 });
 ```
 
-Available helpers:
+Helpers:
 
 - `ctx.subscription.plan`
 - `ctx.features.has(name)`
@@ -192,32 +278,9 @@ Available helpers:
 - `ctx.limits.within(name, amount)`
 - `ctx.limits.remaining(name)`
 
-## Adapters
+## Backend framework wiring
 
-Use the memory store for tests and simple apps:
-
-```ts
-import { memoryStore } from "author-js";
-```
-
-Use real stores when grants must persist:
-
-```ts
-import { postgresStore } from "author-js/postgres";
-import { mongodbStore } from "author-js/mongodb";
-```
-
-Use Redis cache only when decision checks are hot or app instances are distributed:
-
-```ts
-import { redisCache } from "author-js/redis";
-```
-
-Do not add Redis just because it exists.
-
-## Frameworks
-
-Backend enforcement belongs in route handlers/middleware.
+Enforce checks before data changes.
 
 Imports:
 
@@ -229,14 +292,27 @@ import { requireCan } from "author-js/elysia";
 import { assertCan, requireCan } from "author-js/next/server";
 ```
 
-For mutations, call `.throw()` or `assertCan` before changing data.
+For Next.js route handlers/server actions, load the current user and target resource, then:
 
-## React
+```ts
+await assertCan({
+  author,
+  entityType: "User",
+  entity: user,
+  action: "update",
+  resourceType: "Project",
+  resource: project,
+});
+```
 
-UI checks are not security boundaries.
+Then perform the mutation.
+
+## React and Next.js UI
+
+Use UI checks only to hide/show controls. Keep backend checks too.
 
 ```tsx
-import { AuthorProvider, Can, Cannot, useCan } from "author-js/react";
+import { AuthorProvider, Can } from "author-js/react";
 
 <AuthorProvider authorization={author} entityType="User" entity={user}>
   <Can do="update" on="Project" resource={project} fallback={null}>
@@ -251,14 +327,14 @@ Next.js client components:
 import { AuthorProvider, Can } from "author-js/next/client";
 ```
 
-## Testing
+## Testing in app repos
 
-Use the smallest test proving the rule:
+Use the app's existing test runner. With Bun:
 
 ```ts
 import { expect, test } from "bun:test";
 
-test("owners can update their project", async () => {
+test("project owners can update their project", async () => {
   const allowed = await author.as("User", { id: "u1", role: "member" }).can("update").on("Project", {
     id: "p1",
     ownerId: "u1",
@@ -269,7 +345,13 @@ test("owners can update their project", async () => {
 });
 ```
 
-Local checks:
+Minimum useful tests:
+
+- allowed case
+- denied case for the same rule when security-sensitive
+- backend mutation rejects unauthorized user
+
+Run the app's normal checks. If Bun scripts exist:
 
 ```bash
 bun run fmt:check
@@ -278,33 +360,34 @@ bun run typecheck
 bun test
 ```
 
-Real adapter tests when changing PostgreSQL, MongoDB, Redis, Docker, or workflow code:
+## Agent workflow
 
-```bash
-docker compose up -d --wait
-bun run test:integration
-docker compose down
-```
+1. Read the app's package/config/routes/models.
+2. Identify the protected action the user asked for.
+3. Define only the needed entities/resources/actions.
+4. Add named policy/policies.
+5. Wire backend enforcement.
+6. Add React `Can` only if the UI needs it.
+7. Add persistence/cache only if the app needs persisted grants or hot cache.
+8. Add one focused test.
+9. Run the smallest relevant checks.
 
-## Review checklist
+## Common app mistakes
 
-Before finishing author.js work:
+- Only hiding a button in React and forgetting the API check.
+- Rewriting the app's auth/session system instead of adapting its current user object.
+- Adding Redis before there is a cache need.
+- Creating a custom `PermissionService` wrapper around author.js on day one.
+- Using raw SQL/collection writes instead of `author.roles`, `author.permissions`, or `author.relations`.
+- Forgetting cache invalidation after grant/revoke/relation writes.
+- Making context fields optional to silence TypeScript instead of passing the real request context.
+- Adding every possible action/resource instead of the one the feature needs.
 
-- Is every backend mutation protected by an authorization check?
-- Are entity/resource/action names explicit and typed?
-- Are policies named after business rules?
-- Are UI checks mirrored by backend checks where needed?
-- Did cache invalidation happen after role, permission, or relation writes?
-- Did the change avoid `any` and unsafe casts?
-- Is there one focused test for each new rule?
-- Did you run `bun run fmt:check && bun run lint && bun run typecheck`?
+## Final answer style
 
-## Common mistakes
+Tell the user:
 
-- Checking only in React and forgetting the API.
-- Writing raw role queries instead of using `author.roles.*`.
-- Creating a generic `PermissionService` wrapper before the app needs it.
-- Adding Redis caching before measuring hot authorization paths.
-- Using stringly typed resource names outside `defineResource`/checks.
-- Forgetting that `deny` overrides `allow`.
-- Hiding missing context by making fields optional.
+- what file(s) changed
+- which rule is enforced
+- which checks ran
+- anything intentionally skipped and when to add it
