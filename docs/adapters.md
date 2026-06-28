@@ -1,6 +1,6 @@
-# Store adapters
+# Store and cache adapters
 
-Core only depends on the `AuthorStore` interface. Use the in-memory store for tests, PostgreSQL or MongoDB for real apps.
+Core only depends on adapter interfaces. Use stores for authorization data and caches for decision caching.
 
 ## Memory
 
@@ -39,3 +39,31 @@ await ensureMongoIndexes({ client, database: "my_app" });
 ## Audit logs
 
 Every adapter can implement `writeAuditLog`. The core engine calls it after each decision when available.
+
+## Decision caching
+
+Use `memoryCache` for tests or `redisCache` for backend caching.
+
+```ts
+import { createAuthor, decisionCacheKey, memoryCache } from "author-js";
+import { redisCache } from "author-js/redis";
+
+const cache = redisCache({ client: Bun.redis, prefix: "my-app-auth" });
+const author = createAuthor({ cache, cacheTtlMs: 30_000, entities, resources, policies });
+
+await author.invalidate();
+
+const key = await decisionCacheKey({
+  entityType: "User",
+  entityId: "u1",
+  action: "read",
+  resourceType: "Project",
+  resourceId: "p1",
+  mode: "backend",
+  context: {},
+  resource: { id: "p1" },
+});
+await cache.delete(key);
+```
+
+Cache keys are namespaced and SHA-256 hashed from length-delimited stable input parts to avoid collisions.

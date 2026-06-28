@@ -1,0 +1,38 @@
+import type { Decision } from "../../core/src/index.js";
+
+type MaybePromise<T> = T | Promise<T>;
+type AuthorLike = {
+  evaluate(input: { entity: unknown; action: string; resourceType: string; resource: unknown; context: Record<string, unknown>; mode: "backend" }): Promise<Decision>;
+};
+type ElysiaContextLike = { set?: { status?: number } };
+
+/** Options for Elysia `beforeHandle` authorization checks. */
+export type ElysiaRequireCanOptions<C> = {
+  author: AuthorLike;
+  entity(context: C): MaybePromise<unknown>;
+  action: string | ((context: C) => MaybePromise<string>);
+  resourceType: string | ((context: C) => MaybePromise<string>);
+  resource(context: C): MaybePromise<unknown>;
+  context?: (context: C) => MaybePromise<Record<string, unknown>>;
+};
+
+/** Creates an Elysia-compatible `beforeHandle` hook that returns 403 JSON when denied. */
+export function requireCan<C extends ElysiaContextLike>(options: ElysiaRequireCanOptions<C>) {
+  return async (context: C): Promise<{ error: "Forbidden"; reason: string } | void> => {
+    const [entity, action, resourceType, resource, customContext] = await Promise.all([
+      options.entity(context),
+      value(options.action, context),
+      value(options.resourceType, context),
+      options.resource(context),
+      options.context?.(context) ?? {},
+    ]);
+    const decision = await options.author.evaluate({ entity, action, resourceType, resource, context: customContext, mode: "backend" });
+    if (decision.allowed) return;
+    if (context.set) context.set.status = 403;
+    return { error: "Forbidden", reason: decision.reason };
+  };
+}
+
+function value<C>(input: string | ((context: C) => MaybePromise<string>), context: C): MaybePromise<string> {
+  return typeof input === "string" ? input : input(context);
+}

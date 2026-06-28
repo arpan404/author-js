@@ -36,6 +36,18 @@ import { requireCan } from "author-js/fastify";
 fastify.patch("/projects/:id", { preHandler: requireCan({ author, entity, action: "update", resourceType: "Project", resource }) }, handler);
 ```
 
+## Elysia
+
+```ts
+import { requireCan } from "author-js/elysia";
+
+new Elysia().patch(
+  "/projects/:id",
+  handler,
+  { beforeHandle: requireCan({ author, entity, action: "update", resourceType: "Project", resource }) },
+);
+```
+
 ## Next.js
 
 ```ts

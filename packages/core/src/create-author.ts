@@ -1,3 +1,4 @@
+import { decisionCacheKey, type AuthorCache } from "./cache.js";
 import type { EntityDefinition, ResourceDefinition } from "./definitions.js";
 import { AuthorizationDeniedError, UnknownActionError, UnknownEntityTypeError, UnknownResourceTypeError } from "./errors.js";
 import { normalizePolicyResult, type AuthorPolicyContext, type Policy } from "./policy.js";
@@ -27,6 +28,10 @@ export type CreateAuthorInput<Entities, Resources, CustomContext extends Record<
   policies: readonly Policy<PolicyContext<Entities, Resources, CustomContext>>[];
   store?: AuthorStore;
   mode?: Mode;
+  /** Optional decision cache. Include resource/context data in cache keys to avoid cross-request collisions. */
+  cache?: AuthorCache;
+  /** TTL for cached decisions. Defaults to 30 seconds when `cache` is provided. */
+  cacheTtlMs?: number;
 };
 
 type EvaluateInput<CustomContext extends Record<string, unknown>> = {
@@ -54,6 +59,8 @@ export type AuthorInstance<Entities, Resources, CustomContext extends Record<str
   };
   evaluate(input: EvaluateInput<CustomContext>): Promise<Decision>;
   readonly store: AuthorStore;
+  readonly cache: AuthorCache | undefined;
+  invalidate(input?: { key?: string }): Promise<void>;
 };
 
 /**
@@ -69,6 +76,7 @@ export function createAuthor<
 >(input: CreateAuthorInput<Entities, Resources, CustomContext>): AuthorInstance<Entities, Resources, CustomContext> {
   const store = input.store ?? memoryStore();
   const mode = input.mode ?? "backend";
+  const cacheTtlMs = input.cacheTtlMs ?? 30_000;
 
   async function evaluate(request: EvaluateInput<CustomContext>): Promise<Decision> {
     const startedAt = performance.now();
@@ -81,6 +89,20 @@ export function createAuthor<
 
     const entityId = entityDefinition.id(request.entity);
     const resourceId = resourceDefinition.id(request.resource);
+    const cacheKey = input.cache ? await decisionCacheKey({
+      entityType: entityDefinition.type,
+      entityId,
+      action: request.action,
+      resourceType: request.resourceType,
+      resourceId,
+      mode: request.mode,
+      context: request.context,
+      resource: request.resource,
+    }) : null;
+    if (cacheKey) {
+      const cached = await input.cache?.get(cacheKey);
+      if (cached) return cached;
+    }
     const ctx = buildContext({
       entity: request.entity,
       action: request.action,
@@ -124,6 +146,8 @@ export function createAuthor<
       durationMs: performance.now() - startedAt,
     });
 
+    if (cacheKey) await input.cache?.set(cacheKey, decision, cacheTtlMs);
+
     await store.writeAuditLog?.({
       id: crypto.randomUUID(),
       entityType: decision.entity.type,
@@ -142,6 +166,12 @@ export function createAuthor<
 
   return {
     store,
+    cache: input.cache,
+    async invalidate(request) {
+      if (!input.cache) return;
+      if (request?.key) await input.cache.delete(request.key);
+      else await input.cache.clear?.();
+    },
     evaluate,
     as(entity) {
       const chain = (negated: boolean) => (action: ResourceAction<Resources>) => ({

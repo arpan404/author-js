@@ -64,12 +64,33 @@ const allowed = await author
 - `author-js/express`
 - `author-js/hono`
 - `author-js/fastify`
+- `author-js/elysia`
 - `author-js/next`
+- `author-js/redis`
+
+## Caching
+
+```ts
+import { createAuthor, memoryCache } from "author-js";
+import { redisCache } from "author-js/redis";
+
+const author = createAuthor({
+  cache: redisCache({ client: Bun.redis, prefix: "my-app-auth" }),
+  cacheTtlMs: 30_000,
+  entities,
+  resources,
+  policies,
+});
+
+await author.invalidate(); // clear adapter cache when supported
+```
+
+Cache keys are SHA-256 hashed from length-delimited stable input parts and namespaced to avoid collisions.
 
 ## Docs
 
 - [Core concepts](./docs/core.md)
-- [Store adapters](./docs/adapters.md)
+- [Store and cache adapters](./docs/adapters.md)
 - [React usage](./docs/react.md)
 - [Framework middleware](./docs/frameworks.md)
 - [Publishing](./docs/publishing.md)

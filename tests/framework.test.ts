@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { AuthorizationDeniedError, type Decision } from "../index";
+import { requireCan as elysiaRequireCan } from "../packages/elysia/src/index";
 import { requireCan as expressRequireCan } from "../packages/express/src/index";
 import { requireCan as fastifyRequireCan } from "../packages/fastify/src/index";
 import { requireCan as honoRequireCan } from "../packages/hono/src/index";
@@ -61,6 +62,14 @@ describe("framework adapters", () => {
     expect(calls).toEqual(["next"]);
     expect(response).toBeInstanceOf(Response);
     expect(await response?.json()).toEqual({ body: { error: "Forbidden", reason: "no" }, status: 403 });
+  });
+
+  test("elysia requireCan returns 403 body when denied", async () => {
+    const hook = elysiaRequireCan({ author: { evaluate: async () => deniedDecision }, entity: () => ({}), action: "read", resourceType: "Project", resource: () => ({}) });
+    const context = { set: {} as { status?: number } };
+
+    await expect(hook(context)).resolves.toEqual({ error: "Forbidden", reason: "no" });
+    expect(context.set.status).toBe(403);
   });
 
   test("fastify requireCan sends only when denied", async () => {

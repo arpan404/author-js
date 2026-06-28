@@ -48,6 +48,14 @@
       "types": "./dist/packages/fastify/src/index.d.ts",
       "import": "./dist/packages/fastify/src/index.js"
     },
+    "./elysia": {
+      "types": "./dist/packages/elysia/src/index.d.ts",
+      "import": "./dist/packages/elysia/src/index.js"
+    },
+    "./redis": {
+      "types": "./dist/packages/redis/src/index.d.ts",
+      "import": "./dist/packages/redis/src/index.js"
+    },
     "./next": {
       "types": "./dist/packages/next/src/index.d.ts",
       "import": "./dist/packages/next/src/index.js"
@@ -65,7 +73,7 @@
     "access": "public",
     "provenance": true
   },
-  "keywords": ["authorization", "rbac", "abac", "rebac", "typescript", "react"],
+  "keywords": ["authorization", "rbac", "abac", "rebac", "typescript", "react", "elysia", "redis"],
   "license": "MIT",
   "repository": {
     "type": "git",
