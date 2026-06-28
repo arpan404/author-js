@@ -5,6 +5,9 @@ import type {
   GetPermissionsInput,
   GetRelationsInput,
   GetRolesInput,
+  HasPermissionInput,
+  HasRelationInput,
+  HasRoleInput,
   PermissionGrant,
   PermissionGrantInput,
   PolicyEffect,
@@ -41,12 +44,15 @@ export function mongodbStore(input: MongoStoreInput): AuthorStore {
 
   return {
     getRoles: (query) => findRoles(roles, query),
+    hasRole: (query) => hasRole(roles, query),
     grantRole: (role) => insert(roles, roleDocument(role)),
     revokeRole: (role) => remove(roles, roleQuery(role)),
     getPermissions: (query) => findPermissions(permissions, query),
+    hasPermission: (query) => hasPermission(permissions, query),
     grantPermission: (permission) => insert(permissions, permissionDocument(permission)),
     revokePermission: (permission) => remove(permissions, permissionQuery(permission)),
     getRelations: (query) => findRelations(relations, query),
+    hasRelation: (query) => hasRelation(relations, query),
     createRelation: (relation) => insert(relations, relationDocument(relation)),
     deleteRelation: (relation) => remove(relations, relationQuery(relation)),
     writeAuditLog: (entry) => insert(auditLogs, auditDocument(entry)),
@@ -98,6 +104,21 @@ async function findRoles(collection: MongoCollection, input: GetRolesInput): Pro
     .filter((role) => role !== null);
 }
 
+async function hasRole(collection: MongoCollection, input: HasRoleInput): Promise<boolean> {
+  const rows = await collection
+    .find(
+      withOptionals(
+        { entityType: input.entityType, entityId: input.entityId, role: input.role },
+        "scopeType",
+        input.scopeType,
+        "scopeId",
+        input.scopeId,
+      ),
+    )
+    .toArray();
+  return rows.length > 0;
+}
+
 async function findPermissions(collection: MongoCollection, input: GetPermissionsInput): Promise<PermissionGrant[]> {
   return (
     await collection
@@ -114,6 +135,22 @@ async function findPermissions(collection: MongoCollection, input: GetPermission
   )
     .map(readPermission)
     .filter((permission) => permission !== null);
+}
+
+async function hasPermission(collection: MongoCollection, input: HasPermissionInput): Promise<boolean> {
+  const rows = await collection
+    .find(
+      withOptionals(
+        { entityType: input.entityType, entityId: input.entityId, action: input.action },
+        "resourceType",
+        input.resourceType,
+        "resourceId",
+        input.resourceId,
+      ),
+    )
+    .toArray();
+  const effects = rows.map(readEffect).filter((effect) => effect !== null);
+  return !effects.includes("deny") && effects.includes("allow");
 }
 
 async function findRelations(collection: MongoCollection, input: GetRelationsInput): Promise<RelationTuple[]> {
@@ -138,6 +175,27 @@ async function findRelations(collection: MongoCollection, input: GetRelationsInp
   )
     .map(readRelation)
     .filter((relation) => relation !== null);
+}
+
+async function hasRelation(collection: MongoCollection, input: HasRelationInput): Promise<boolean> {
+  const rows = await collection
+    .find(
+      withOptionals(
+        {},
+        "subjectType",
+        input.subjectType,
+        "subjectId",
+        input.subjectId,
+        "relation",
+        input.relation,
+        "objectType",
+        input.objectType,
+        "objectId",
+        input.objectId,
+      ),
+    )
+    .toArray();
+  return rows.length > 0;
 }
 
 function roleDocument(input: RoleGrantInput): MongoQuery {
@@ -271,6 +329,10 @@ function readPermission(document: unknown): PermissionGrant | null {
         stringAt(document, "resourceId"),
       )
     : null;
+}
+
+function readEffect(document: unknown): PolicyEffect | null {
+  return isRecord(document) ? (effectAt(document, "effect") ?? null) : null;
 }
 
 function readRelation(document: unknown): RelationTuple | null {

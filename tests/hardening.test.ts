@@ -143,7 +143,7 @@ describe("hardening", () => {
     let calls = 0;
     const author = createAuthor({
       cache,
-      cacheTtlMs: 1,
+      cacheTtlMs: 50,
       entities: { User: UserEntity },
       resources: { Project: ProjectResource },
       policies: [
@@ -161,7 +161,7 @@ describe("hardening", () => {
       await author.as("User", { id: "u1", role: "member" }).can("read").on("Project", { id: "p1", ownerId: "u1" }),
     ).toBe(true);
     expect(calls).toBe(1);
-    await Bun.sleep(5);
+    await Bun.sleep(60);
     expect(
       await author.as("User", { id: "u1", role: "member" }).can("read").on("Project", { id: "p1", ownerId: "u1" }),
     ).toBe(true);

@@ -39,6 +39,14 @@ export class UnknownResourceTypeError extends AuthorError {
   }
 }
 
+/** Thrown when multiple modules or root resources register the same resource type. */
+export class DuplicateResourceTypeError extends AuthorError {
+  constructor(type: string, sources: readonly string[]) {
+    super("DUPLICATE_RESOURCE_TYPE", `Duplicate resource type: ${type}`, { type, sources: [...sources] });
+    this.name = "DuplicateResourceTypeError";
+  }
+}
+
 /** Thrown when an action is not listed on the target resource definition. */
 export class UnknownActionError extends AuthorError {
   constructor(action: string, resourceType: string) {

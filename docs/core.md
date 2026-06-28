@@ -56,28 +56,56 @@ export const ProjectResource = defineResource<Project>()({
 Policies are named rules. Return `true` to match, `false` to skip.
 
 ```ts
-import { allow, deny } from "author-js";
+import { policy } from "author-js";
 
 export const projectPolicies = [
-  allow("admins can do anything", ({ entity }) => entity.role === "admin"),
+  policy
+    .for("User")
+    .on("Project")
+    .can(["read", "create", "update", "delete"])
+    .allow("admins can do anything", ({ entity }) => entity.role === "admin"),
 
-  allow("owners can update projects", ({ entity, resource, action }) => {
-    if (resource.type !== "Project") return false;
-    return action === "update" && entity.id === resource.data.ownerId;
-  }),
+  policy
+    .for("User")
+    .on("Project")
+    .can("update")
+    .allow("owners can update projects", ({ entity, resource }) => entity.id === resource.data.ownerId),
 
-  deny("members cannot delete projects", ({ entity, action }) => {
-    return entity.role === "member" && action === "delete";
-  }),
+  policy
+    .for("User")
+    .on("Project")
+    .can("delete")
+    .deny("members cannot delete projects", ({ entity }) => entity.role === "member"),
 ] as const;
 ```
 
 Evaluation order:
 
-1. All policies run.
-2. Any matching deny wins.
-3. Otherwise any matching allow wins.
-4. Otherwise the result is denied.
+1. The engine selects only rules relevant to the entity type, resource type, and action.
+2. Boolean checks evaluate relevant deny rules first and stop at the first matching deny.
+3. If no deny matches, boolean checks evaluate relevant allow rules and stop at the first matching allow.
+4. `.explain()` runs every relevant decision policy so the decision includes all matching and skipped policies.
+5. If no allow matches, the result is denied.
+
+Unscoped policies are relevant to every check. In larger apps, scope policies so the engine can skip unrelated rules before running user code:
+
+```ts
+policy
+  .for("User")
+  .on("Project")
+  .can("update")
+  .allow("owners can update projects", ({ entity, resource }) => entity.id === resource.data.ownerId);
+
+policy
+  .for("User")
+  .on("Project")
+  .can("delete")
+  .deny("members cannot delete projects", ({ entity }) => entity.role === "member");
+```
+
+Scopes are static applicability metadata. Keep dynamic checks such as ownership, tenant membership, roles, and subscription state inside the policy function.
+The lower-level `allow(name, scope, check)` and `deny(name, scope, check)` helpers are still available when you want to build scopes yourself.
+Detailed checker results can provide custom reasons, but an allow policy always produces an allow and a deny policy always produces a deny; return `skip(...)` or `false` when the policy does not apply.
 
 ## Typed request context
 
@@ -100,8 +128,8 @@ Pass it to `createAuthor`:
 createAuthor({
   context: AuthContext,
   entities,
-  resources,
-  policies,
+  modules,
+  policies: globalPolicies,
 });
 ```
 
@@ -109,25 +137,33 @@ Now `ctx.context.tenantId` is typed as `string` in policies.
 
 ## Author instance
 
-Keep definitions, plans, and policies in separate files. Compose them once.
+Keep definitions, plans, modules, and policies in separate files. Compose them once.
 
 ```ts
-import { createAuthor } from "author-js";
-import { UserEntity, ProjectResource } from "./definitions";
+import { createAuthor, defineAuthorModule } from "author-js";
+import { UserEntity, ProjectResource, InvoiceResource } from "./definitions";
 import { entitlements } from "./plans";
 import { organizationPolicies } from "./policies/organization";
 import { projectPolicies } from "./policies/project";
 import { billingPolicies } from "./policies/billing";
 
+export const projectModule = defineAuthorModule({
+  name: "projects",
+  resources: { Project: ProjectResource },
+  policies: projectPolicies,
+});
+
+export const billingModule = defineAuthorModule({
+  name: "billing",
+  resources: { Invoice: InvoiceResource },
+  policies: billingPolicies,
+});
+
 export const author = createAuthor({
   entities: { User: UserEntity },
-  resources: { Project: ProjectResource },
+  modules: [projectModule, billingModule],
   entitlements,
-  policies: [
-    ...organizationPolicies,
-    ...projectPolicies,
-    ...billingPolicies,
-  ],
+  policies: organizationPolicies,
 });
 ```
 
@@ -138,11 +174,91 @@ src/authorization/
   author.ts
   definitions.ts
   plans.ts
+  modules/
+    projects.ts
+    billing.ts
   policies/
     organization.ts
-    project.ts
-    billing.ts
 ```
+
+## Author modules
+
+Use modules to group resource definitions and policies by domain while still building one authorization engine. This keeps global denies and audit behavior centralized.
+
+```ts
+import { defineAuthorModule } from "author-js";
+
+export const projectModule = defineAuthorModule({
+  name: "projects",
+  resources: { Project: ProjectResource },
+  policies: projectPolicies,
+});
+
+export const billingModule = defineAuthorModule({
+  name: "billing",
+  resources: { Invoice: InvoiceResource },
+  policies: billingPolicies,
+});
+```
+
+Compose modules once:
+
+```ts
+export const author = createAuthor({
+  entities: { User: UserEntity, ApiKey: ApiKeyEntity },
+  modules: [projectModule, billingModule],
+  policies: globalPolicies,
+});
+```
+
+Module resources and policies are merged into one runtime index. If two modules register the same resource type, `createAuthor` throws `DuplicateResourceTypeError`.
+
+For small apps, `createAuthor({ resources, policies })` is still valid. Modules are the preferred API when resources and policies are owned by different domains.
+
+## Decision hooks
+
+Use `afterDecision` hooks for side effects such as metrics, custom logs, tracing, or cache warming. Hooks are scoped like policies and run after a decision is produced. They cannot change the returned decision.
+
+```ts
+import { policy } from "author-js";
+
+export const projectPolicies = [
+  policy.for("User").on("Project").can("read").allow("members can read projects", async (ctx) => {
+    return ctx.parents.hasRole("member", "organization");
+  }),
+
+  policy
+    .for("User")
+    .on("Project")
+    .can("read")
+    .afterDecision("record project read", async (ctx, decision) => {
+      await metrics.count("auth.project.read", {
+        allowed: decision.allowed,
+        mode: ctx.mode,
+      });
+    }),
+];
+```
+
+For global hooks, use `afterDecision(name, run)` directly or omit one or more builder scopes.
+
+## Audit mode
+
+Stores with `writeAuditLog` receive audit entries by default for both boolean checks and explanations. Tune this per author instance:
+
+```ts
+createAuthor({
+  entities,
+  modules,
+  audit: "explain",
+});
+```
+
+Modes:
+
+- `all`: write audit logs for `.allowed()`, awaited checks, `author.check(...)`, and `.explain()`
+- `explain`: write audit logs only for full decisions from `.explain()` and `author.evaluate(...)`
+- `none`: disable automatic audit writes
 
 ## Check API
 
@@ -150,6 +266,20 @@ Boolean result:
 
 ```ts
 const allowed = await author.as("User", user).can("update").on("Project", project);
+```
+
+Direct boolean check:
+
+```ts
+const allowed = await author.check({
+  entityType: "User",
+  entity: user,
+  action: "update",
+  resourceType: "Project",
+  resource: project,
+  context: {},
+  mode: "backend",
+});
 ```
 
 Detailed decision:

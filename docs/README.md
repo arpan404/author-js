@@ -1,6 +1,6 @@
 # Documentation
 
-author.js is a TypeScript authorization library. You define entities, resources, and policies once, then check permissions in your API and UI.
+author.js is a TypeScript authorization library. You define entities, domain modules, resources, and scoped policies once, then check permissions in your API and UI.
 
 ```ts
 await author.as("User", user).can("update").on("Project", project);
@@ -10,7 +10,7 @@ await author.as("User", user).can("update").on("Project", project);
 
 New to author.js? Read in this order:
 
-1. [Core](./core.md) — model your app, write policies, check permissions
+1. [Core](./core.md) — model your app, compose modules, write scoped policies, check permissions
 2. [Management](./management.md) — grant, revoke, and list roles, permissions, and relations
 3. [Adapters](./adapters.md) — persist roles and cache decisions (when you need them)
 4. [React](./react.md) or [Frameworks](./frameworks.md) — wire checks into your UI or API
@@ -20,7 +20,7 @@ New to author.js? Read in this order:
 
 | Guide | What you'll learn |
 | --- | --- |
-| [Core](./core.md) | Entities, resources, policies, plans, parent checks, project layout |
+| [Core](./core.md) | Entities, resources, modules, scoped policies, plans, parent checks |
 | [Management](./management.md) | Roles, direct permissions, relations, revoking, settings-page patterns |
 | [Adapters](./adapters.md) | Memory, PostgreSQL, MongoDB stores; Redis caching |
 | [React](./react.md) | `AuthorProvider`, `Can`, `Cannot`, hooks |

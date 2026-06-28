@@ -4,6 +4,9 @@ import type {
   GetPermissionsInput,
   GetRelationsInput,
   GetRolesInput,
+  HasPermissionInput,
+  HasRelationInput,
+  HasRoleInput,
   PermissionGrant,
   PolicyEffect,
   RelationTuple,
@@ -23,6 +26,7 @@ export function postgresStore(input: PostgresStoreInput): AuthorStore {
   const db: PostgresClient = "client" in input ? input.client : new Pool({ connectionString: input.connectionString });
   return {
     getRoles: (query) => getRoles(db, query),
+    hasRole: (query) => hasRole(db, query),
     grantRole: (role) =>
       exec(
         db,
@@ -44,6 +48,7 @@ export function postgresStore(input: PostgresStoreInput): AuthorStore {
         [role.entityType, role.entityId, role.role, role.scopeType ?? null, role.scopeId ?? null],
       ),
     getPermissions: (query) => getPermissions(db, query),
+    hasPermission: (query) => hasPermission(db, query),
     grantPermission: (permission) =>
       exec(
         db,
@@ -73,6 +78,7 @@ export function postgresStore(input: PostgresStoreInput): AuthorStore {
         ],
       ),
     getRelations: (query) => getRelations(db, query),
+    hasRelation: (query) => hasRelation(db, query),
     createRelation: (relation) =>
       exec(
         db,
@@ -126,12 +132,29 @@ async function getRoles(db: PostgresClient, input: GetRolesInput): Promise<RoleG
   return result.rows.map(readRole).filter(isPresent);
 }
 
+async function hasRole(db: PostgresClient, input: HasRoleInput): Promise<boolean> {
+  const result = await db.query(
+    `SELECT 1 FROM author_roles WHERE entity_type = $1 AND entity_id = $2 AND role = $3 AND ($4::text IS NULL OR scope_type = $4) AND ($5::text IS NULL OR scope_id = $5) LIMIT 1`,
+    [input.entityType, input.entityId, input.role, input.scopeType ?? null, input.scopeId ?? null],
+  );
+  return result.rows.length > 0;
+}
+
 async function getPermissions(db: PostgresClient, input: GetPermissionsInput): Promise<PermissionGrant[]> {
   const result = await db.query(
     `SELECT id, entity_type, entity_id, action, resource_type, resource_id, effect, created_at FROM author_permissions WHERE entity_type = $1 AND entity_id = $2 AND ($3::text IS NULL OR resource_type = $3) AND ($4::text IS NULL OR resource_id = $4)`,
     [input.entityType, input.entityId, input.resourceType ?? null, input.resourceId ?? null],
   );
   return result.rows.map(readPermission).filter(isPresent);
+}
+
+async function hasPermission(db: PostgresClient, input: HasPermissionInput): Promise<boolean> {
+  const result = await db.query(
+    `SELECT effect FROM author_permissions WHERE entity_type = $1 AND entity_id = $2 AND action = $3 AND ($4::text IS NULL OR resource_type = $4) AND ($5::text IS NULL OR resource_id = $5)`,
+    [input.entityType, input.entityId, input.action, input.resourceType ?? null, input.resourceId ?? null],
+  );
+  const effects = result.rows.map(readEffect).filter(isPresent);
+  return !effects.includes("deny") && effects.includes("allow");
 }
 
 async function getRelations(db: PostgresClient, input: GetRelationsInput): Promise<RelationTuple[]> {
@@ -146,6 +169,20 @@ async function getRelations(db: PostgresClient, input: GetRelationsInput): Promi
     ],
   );
   return result.rows.map(readRelation).filter(isPresent);
+}
+
+async function hasRelation(db: PostgresClient, input: HasRelationInput): Promise<boolean> {
+  const result = await db.query(
+    `SELECT 1 FROM author_relations WHERE ($1::text IS NULL OR subject_type = $1) AND ($2::text IS NULL OR subject_id = $2) AND ($3::text IS NULL OR relation = $3) AND ($4::text IS NULL OR object_type = $4) AND ($5::text IS NULL OR object_id = $5) LIMIT 1`,
+    [
+      input.subjectType ?? null,
+      input.subjectId ?? null,
+      input.relation ?? null,
+      input.objectType ?? null,
+      input.objectId ?? null,
+    ],
+  );
+  return result.rows.length > 0;
 }
 
 function isPresent<T>(value: T | null): value is T {
@@ -184,6 +221,10 @@ function readPermission(row: unknown): PermissionGrant | null {
     "resourceId",
     stringAt(row, "resource_id"),
   );
+}
+
+function readEffect(row: unknown): PolicyEffect | null {
+  return isRecord(row) ? (effectAt(row, "effect") ?? null) : null;
 }
 
 function readRelation(row: unknown): RelationTuple | null {

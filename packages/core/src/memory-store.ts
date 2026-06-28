@@ -5,6 +5,9 @@ import type {
   GetPermissionsInput,
   GetRelationsInput,
   GetRolesInput,
+  HasPermissionInput,
+  HasRelationInput,
+  HasRoleInput,
   PermissionGrant,
   PermissionGrantInput,
   RelationTuple,
@@ -29,6 +32,9 @@ export type MemoryStore = AuthorStore & {
   readonly permissions: readonly PermissionGrant[];
   readonly relations: readonly RelationTuple[];
   readonly auditLogs: readonly AuditEntry[];
+  hasRole(input: HasRoleInput): Promise<boolean>;
+  hasPermission(input: HasPermissionInput): Promise<boolean>;
+  hasRelation(input: HasRelationInput): Promise<boolean>;
 };
 
 /**
@@ -56,6 +62,16 @@ export function memoryStore(): MemoryStore {
           sameOptional(role.scopeId, input.scopeId),
       );
     },
+    async hasRole(input: HasRoleInput) {
+      return roles.some(
+        (role) =>
+          role.entityType === input.entityType &&
+          role.entityId === input.entityId &&
+          role.role === input.role &&
+          sameOptional(role.scopeType, input.scopeType) &&
+          sameOptional(role.scopeId, input.scopeId),
+      );
+    },
     async grantRole(input: RoleGrantInput) {
       roles.push({ ...input, id: id(), createdAt: new Date() });
     },
@@ -79,6 +95,17 @@ export function memoryStore(): MemoryStore {
           sameOptional(permission.resourceId, input.resourceId),
       );
     },
+    async hasPermission(input: HasPermissionInput) {
+      const matches = (permission: PermissionGrant) =>
+        permission.entityType === input.entityType &&
+        permission.entityId === input.entityId &&
+        permission.action === input.action &&
+        sameOptional(permission.resourceType, input.resourceType) &&
+        sameOptional(permission.resourceId, input.resourceId);
+      const deny = permissions.some((permission) => matches(permission) && permission.effect === "deny");
+      const allow = permissions.some((permission) => matches(permission) && permission.effect === "allow");
+      return !deny && allow;
+    },
     async grantPermission(input: PermissionGrantInput) {
       permissions.push({ ...input, id: id(), createdAt: new Date() });
     },
@@ -96,6 +123,16 @@ export function memoryStore(): MemoryStore {
     },
     async getRelations(input: GetRelationsInput) {
       return relations.filter(
+        (relation) =>
+          sameOptional(relation.subjectType, input.subjectType) &&
+          sameOptional(relation.subjectId, input.subjectId) &&
+          sameOptional(relation.relation, input.relation) &&
+          sameOptional(relation.objectType, input.objectType) &&
+          sameOptional(relation.objectId, input.objectId),
+      );
+    },
+    async hasRelation(input: HasRelationInput) {
+      return relations.some(
         (relation) =>
           sameOptional(relation.subjectType, input.subjectType) &&
           sameOptional(relation.subjectId, input.subjectId) &&
