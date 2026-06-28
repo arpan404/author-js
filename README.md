@@ -60,6 +60,37 @@ export const author = createAuthor({
 await author.as("User", user).can("update").on("Project", project).throw();
 ```
 
+## Permission management
+
+Use the built-in management helpers for admin screens and setup scripts. They wrap the configured store and invalidate the decision cache when possible.
+
+```ts
+await author.roles.grant({
+  entityType: "User",
+  entityId: "user_1",
+  role: "admin",
+  scopeType: "Organization",
+  scopeId: "org_1",
+});
+
+await author.permissions.grant({
+  entityType: "User",
+  entityId: "user_1",
+  action: "read",
+  resourceType: "Project",
+  resourceId: "project_1",
+  effect: "allow",
+});
+
+await author.relations.create({
+  subjectType: "User",
+  subjectId: "user_1",
+  relation: "owner",
+  objectType: "Project",
+  objectId: "project_1",
+});
+```
+
 ## Packages
 
 | Import | Purpose |

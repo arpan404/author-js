@@ -4,7 +4,7 @@ import type { EntitlementContext, EntitlementsConfig } from "./entitlements.js";
 import { AuthorizationDeniedError, MissingParentResourceError, UnknownActionError, UnknownEntityTypeError, UnknownResourceTypeError } from "./errors.js";
 import { normalizePolicyResult, type AuthorPolicyContext, type Policy } from "./policy.js";
 import { memoryStore } from "./memory-store.js";
-import type { AuthorStore, Decision, GetPermissionsInput, GetRolesInput, Mode, ParentRef, ParentResolver, PolicyEffect, ResourceInput, ScopeInput } from "./types.js";
+import type { AuthorStore, Decision, DeleteRelationInput, GetPermissionsInput, GetRelationsInput, GetRolesInput, Mode, ParentRef, ParentResolver, PermissionGrant, PermissionGrantInput, PolicyEffect, RelationTuple, RelationTupleInput, ResourceInput, RevokePermissionInput, RevokeRoleInput, RoleGrant, RoleGrantInput, ScopeInput } from "./types.js";
 
 type EntityMap = Record<string, EntityDefinition<unknown, string>>;
 type ResourceMap = Record<string, ResourceDefinition<unknown, string, readonly string[]>>;
@@ -68,6 +68,21 @@ export type AuthorInstance<Entities, Resources, CustomContext extends Record<str
   evaluate(input: EvaluateInput<CustomContext>): Promise<Decision>;
   readonly store: AuthorStore;
   readonly cache: AuthorCache | undefined;
+  readonly roles: {
+    list(input: GetRolesInput): Promise<RoleGrant[]>;
+    grant(input: RoleGrantInput): Promise<void>;
+    revoke(input: RevokeRoleInput): Promise<void>;
+  };
+  readonly permissions: {
+    list(input: GetPermissionsInput): Promise<PermissionGrant[]>;
+    grant(input: PermissionGrantInput): Promise<void>;
+    revoke(input: RevokePermissionInput): Promise<void>;
+  };
+  readonly relations: {
+    list(input: GetRelationsInput): Promise<RelationTuple[]>;
+    create(input: RelationTupleInput): Promise<void>;
+    delete(input: DeleteRelationInput): Promise<void>;
+  };
   invalidate(input?: { key?: string }): Promise<void>;
 };
 
@@ -176,6 +191,39 @@ export function createAuthor<
   return {
     store,
     cache: input.cache,
+    roles: {
+      list: (query) => store.getRoles(query),
+      grant: async (role) => {
+        await store.grantRole(role);
+        await invalidateCache(input.cache);
+      },
+      revoke: async (role) => {
+        await store.revokeRole(role);
+        await invalidateCache(input.cache);
+      },
+    },
+    permissions: {
+      list: (query) => store.getPermissions(query),
+      grant: async (permission) => {
+        await store.grantPermission(permission);
+        await invalidateCache(input.cache);
+      },
+      revoke: async (permission) => {
+        await store.revokePermission(permission);
+        await invalidateCache(input.cache);
+      },
+    },
+    relations: {
+      list: (query) => store.getRelations(query),
+      create: async (relation) => {
+        await store.createRelation(relation);
+        await invalidateCache(input.cache);
+      },
+      delete: async (relation) => {
+        await store.deleteRelation(relation);
+        await invalidateCache(input.cache);
+      },
+    },
     async invalidate(request) {
       if (!input.cache) return;
       if (request?.key) await input.cache.delete(request.key);
@@ -196,6 +244,10 @@ export function createAuthor<
       return { can: chain(false), cannot: chain(true) };
     },
   };
+}
+
+async function invalidateCache(cache: AuthorCache | undefined): Promise<void> {
+  await cache?.clear?.();
 }
 
 function emptyContext<CustomContext extends Record<string, unknown>>(): CustomContext {

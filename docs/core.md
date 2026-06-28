@@ -267,6 +267,50 @@ await ctx.parents.hasRelation("member", "organization");
 
 Use `getRequired` when a missing parent is a programming error. Use `get` when the parent is optional.
 
+## Permission management
+
+The author instance exposes thin management helpers around the configured store:
+
+```ts
+await author.roles.grant({ entityType: "User", entityId: "u1", role: "admin" });
+await author.roles.revoke({ entityType: "User", entityId: "u1", role: "admin" });
+await author.roles.list({ entityType: "User", entityId: "u1" });
+
+await author.permissions.grant({
+  entityType: "User",
+  entityId: "u1",
+  action: "read",
+  resourceType: "Project",
+  resourceId: "p1",
+  effect: "allow",
+});
+await author.permissions.revoke({
+  entityType: "User",
+  entityId: "u1",
+  action: "read",
+  resourceType: "Project",
+  resourceId: "p1",
+  effect: "allow",
+});
+
+await author.relations.create({
+  subjectType: "User",
+  subjectId: "u1",
+  relation: "owner",
+  objectType: "Project",
+  objectId: "p1",
+});
+await author.relations.delete({
+  subjectType: "User",
+  subjectId: "u1",
+  relation: "owner",
+  objectType: "Project",
+  objectId: "p1",
+});
+```
+
+These helpers invalidate the decision cache when the cache supports clearing.
+
 ## Decisions
 
 `.explain()` returns the full decision:
