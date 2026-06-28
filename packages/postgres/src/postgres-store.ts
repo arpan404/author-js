@@ -123,7 +123,7 @@ async function getRoles(db: PostgresClient, input: GetRolesInput): Promise<RoleG
     `SELECT id, entity_type, entity_id, role, scope_type, scope_id, created_at FROM author_roles WHERE entity_type = $1 AND entity_id = $2 AND ($3::text IS NULL OR scope_type = $3) AND ($4::text IS NULL OR scope_id = $4)`,
     [input.entityType, input.entityId, input.scopeType ?? null, input.scopeId ?? null],
   );
-  return result.rows.map(readRole).filter((role) => role !== null);
+  return result.rows.map(readRole).filter(isPresent);
 }
 
 async function getPermissions(db: PostgresClient, input: GetPermissionsInput): Promise<PermissionGrant[]> {
@@ -131,7 +131,7 @@ async function getPermissions(db: PostgresClient, input: GetPermissionsInput): P
     `SELECT id, entity_type, entity_id, action, resource_type, resource_id, effect, created_at FROM author_permissions WHERE entity_type = $1 AND entity_id = $2 AND ($3::text IS NULL OR resource_type = $3) AND ($4::text IS NULL OR resource_id = $4)`,
     [input.entityType, input.entityId, input.resourceType ?? null, input.resourceId ?? null],
   );
-  return result.rows.map(readPermission).filter((permission) => permission !== null);
+  return result.rows.map(readPermission).filter(isPresent);
 }
 
 async function getRelations(db: PostgresClient, input: GetRelationsInput): Promise<RelationTuple[]> {
@@ -145,7 +145,11 @@ async function getRelations(db: PostgresClient, input: GetRelationsInput): Promi
       input.objectId ?? null,
     ],
   );
-  return result.rows.map(readRelation).filter((relation) => relation !== null);
+  return result.rows.map(readRelation).filter(isPresent);
+}
+
+function isPresent<T>(value: T | null): value is T {
+  return value !== null;
 }
 
 function readRole(row: unknown): RoleGrant | null {
