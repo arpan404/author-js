@@ -1,5 +1,6 @@
 import type {
   AuthorStore,
+  Decision,
   Mode,
   ParentResolver,
   PermissionGrant,
@@ -110,7 +111,37 @@ export type PolicyScope = {
 };
 
 /** Named allow/deny rule evaluated by the authorization engine. */
-export type Policy<Ctx> = { name: string; effect: PolicyEffect; check: PolicyChecker<Ctx>; scope?: PolicyScope };
+export type Policy<Ctx> = {
+  phase: "decision";
+  name: string;
+  effect: PolicyEffect;
+  check: PolicyChecker<Ctx>;
+  scope?: PolicyScope;
+};
+
+/** Side-effect hook that runs after a decision is produced. It cannot change the decision. */
+export type DecisionHook<Ctx> = {
+  phase: "afterDecision";
+  name: string;
+  run(ctx: Ctx, decision: Decision): void | Promise<void>;
+  scope?: PolicyScope;
+};
+
+/** One rule accepted by `createAuthor` and author modules. */
+export type AuthorRule<Ctx> = Policy<Ctx> | DecisionHook<Ctx>;
+
+/** Runs after a decision is produced. Use for metrics, custom logs, and other side effects. */
+export function afterDecision<Ctx>(name: string, run: DecisionHook<Ctx>["run"]): DecisionHook<Ctx>;
+export function afterDecision<Ctx>(name: string, scope: PolicyScope, run: DecisionHook<Ctx>["run"]): DecisionHook<Ctx>;
+export function afterDecision<Ctx>(
+  name: string,
+  scopeOrRun: PolicyScope | DecisionHook<Ctx>["run"],
+  run?: DecisionHook<Ctx>["run"],
+): DecisionHook<Ctx> {
+  if (typeof scopeOrRun === "function") return { phase: "afterDecision", name, run: scopeOrRun };
+  if (run) return { phase: "afterDecision", name, scope: scopeOrRun, run };
+  throw new TypeError("Decision hook runner is required");
+}
 
 /** Creates an allow policy. A `true` checker result becomes an allow decision reasoned by `name`. */
 export function allow<Ctx>(name: string, check: PolicyChecker<Ctx>): Policy<Ctx>;
@@ -144,8 +175,12 @@ export function normalizePolicyResult<Ctx>(policy: Policy<Ctx>, result: boolean 
   if (typeof result === "boolean") {
     return result ? { effect: policy.effect, reason: policy.name } : { effect: "skip" };
   }
-  return result;
+  if (result.effect === "skip") return result;
+  return { effect: policy.effect, reason: result.reason };
 }
+
+/** Fluent scoped policy builder. Prefer this in larger apps to avoid unscoped policies. */
+export const policy = scopedPolicyBuilder({});
 
 type ParsedPolicyInput<Ctx> = { check: PolicyChecker<Ctx>; scope?: PolicyScope };
 
@@ -159,6 +194,31 @@ function parsePolicyInput<Ctx>(
 }
 
 function createPolicy<Ctx>(name: string, effect: PolicyEffect, input: ParsedPolicyInput<Ctx>): Policy<Ctx> {
-  if (input.scope) return { name, effect, check: input.check, scope: input.scope };
-  return { name, effect, check: input.check };
+  if (input.scope) return { phase: "decision", name, effect, check: input.check, scope: input.scope };
+  return { phase: "decision", name, effect, check: input.check };
+}
+
+type ScopeInputValue = string | readonly string[];
+type ScopedPolicyBuilder = {
+  for(entityTypes: ScopeInputValue): ScopedPolicyBuilder;
+  on(resourceTypes: ScopeInputValue): ScopedPolicyBuilder;
+  can(actions: ScopeInputValue): ScopedPolicyBuilder;
+  allow<Ctx>(name: string, check: PolicyChecker<Ctx>): Policy<Ctx>;
+  deny<Ctx>(name: string, check: PolicyChecker<Ctx>): Policy<Ctx>;
+  afterDecision<Ctx>(name: string, run: DecisionHook<Ctx>["run"]): DecisionHook<Ctx>;
+};
+
+function scopedPolicyBuilder(scope: PolicyScope): ScopedPolicyBuilder {
+  return {
+    for: (entityTypes) => scopedPolicyBuilder({ ...scope, entityTypes: values(entityTypes) }),
+    on: (resourceTypes) => scopedPolicyBuilder({ ...scope, resourceTypes: values(resourceTypes) }),
+    can: (actions) => scopedPolicyBuilder({ ...scope, actions: values(actions) }),
+    allow: (name, check) => allow(name, scope, check),
+    deny: (name, check) => deny(name, scope, check),
+    afterDecision: (name, run) => afterDecision(name, scope, run),
+  };
+}
+
+function values(input: ScopeInputValue): readonly string[] {
+  return typeof input === "string" ? [input] : input;
 }

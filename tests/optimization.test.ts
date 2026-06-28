@@ -8,6 +8,7 @@ import {
   defineResource,
   deny,
   memoryStore,
+  policy,
 } from "../index";
 import type { AuthorPolicyContext, AuthorStore } from "../index";
 
@@ -170,45 +171,144 @@ describe("engine optimization", () => {
     expect(userDeleteCalls).toBe(0);
   });
 
+  test("fluent scoped policy builder creates resource and action specific rules", async () => {
+    let unrelatedCalls = 0;
+    const author = createAuthor({
+      entities: { User: UserEntity },
+      resources: { Project: ProjectResource, Report: ReportResource },
+      policies: [
+        policy
+          .for("User")
+          .on("Project")
+          .can("read")
+          .allow<Ctx>("users can read projects", ({ resource }) => resource.type === "Project"),
+        policy
+          .for("User")
+          .on("Report")
+          .can("read")
+          .allow<Ctx>("users can read reports", () => {
+            unrelatedCalls += 1;
+            return true;
+          }),
+      ],
+    });
+
+    await expect(author.as("User", { id: "u1" }).can("read").on("Project", { id: "p1" }).allowed()).resolves.toBe(true);
+    expect(unrelatedCalls).toBe(0);
+  });
+
+  test("afterDecision hooks run after selected decisions without changing the outcome", async () => {
+    const seen: Array<{ allowed: boolean; reason: string; action: string }> = [];
+    const author = createAuthor({
+      entities: { User: UserEntity },
+      resources: { Project: ProjectResource },
+      policies: [
+        policy
+          .for("User")
+          .on("Project")
+          .can("read")
+          .allow<Ctx>("project read", () => true),
+        policy
+          .for("User")
+          .on("Project")
+          .can("read")
+          .afterDecision<Ctx>("record read decision", (_ctx, decision) => {
+            seen.push({ allowed: decision.allowed, reason: decision.reason, action: decision.action });
+          }),
+      ],
+    });
+
+    const allowed = await author.as("User", { id: "u1" }).can("read").on("Project", { id: "p1" }).allowed();
+
+    expect(allowed).toBe(true);
+    expect(seen).toEqual([{ allowed: true, reason: "project read", action: "read" }]);
+  });
+
+  test("audit mode can disable logs or keep them only for explanations", async () => {
+    const noAuditStore = memoryStore();
+    const noAuditAuthor = createAuthor({
+      store: noAuditStore,
+      audit: "none",
+      entities: { User: UserEntity },
+      resources: { Project: ProjectResource },
+      policies: [
+        policy
+          .for("User")
+          .on("Project")
+          .can("read")
+          .allow<Ctx>("project read", () => true),
+      ],
+    });
+
+    await noAuditAuthor.as("User", { id: "u1" }).can("read").on("Project", { id: "p1" }).allowed();
+    await noAuditAuthor.as("User", { id: "u1" }).can("read").on("Project", { id: "p1" }).explain();
+
+    expect(noAuditStore.auditLogs).toHaveLength(0);
+
+    const explainOnlyStore = memoryStore();
+    const explainOnlyAuthor = createAuthor({
+      store: explainOnlyStore,
+      audit: "explain",
+      entities: { User: UserEntity },
+      resources: { Project: ProjectResource },
+      policies: [
+        policy
+          .for("User")
+          .on("Project")
+          .can("read")
+          .allow<Ctx>("project read", () => true),
+      ],
+    });
+
+    await explainOnlyAuthor.as("User", { id: "u1" }).can("read").on("Project", { id: "p1" }).allowed();
+    expect(explainOnlyStore.auditLogs).toHaveLength(0);
+
+    await explainOnlyAuthor.as("User", { id: "u1" }).can("read").on("Project", { id: "p1" }).explain();
+    expect(explainOnlyStore.auditLogs).toHaveLength(1);
+  });
+
   test("boolean checks can stop at a matching deny while explain remains exhaustive", async () => {
-    let laterAllowCalls = 0;
+    let earlyAllowCalls = 0;
 
     const author = createAuthor({
       entities: { User: UserEntity },
       resources: { Project: ProjectResource },
       policies: [
+        allow<Ctx>("early allow", { entityTypes: ["User"], resourceTypes: ["Project"], actions: ["delete"] }, () => {
+          earlyAllowCalls += 1;
+          return true;
+        }),
         deny<Ctx>(
           "deny delete",
           { entityTypes: ["User"], resourceTypes: ["Project"], actions: ["delete"] },
           () => true,
         ),
-        allow<Ctx>("later allow", { entityTypes: ["User"], resourceTypes: ["Project"], actions: ["delete"] }, () => {
-          laterAllowCalls += 1;
-          return true;
-        }),
       ],
     });
 
     await expect(author.as("User", { id: "u1" }).can("delete").on("Project", { id: "p1" }).allowed()).resolves.toBe(
       false,
     );
-    expect(laterAllowCalls).toBe(0);
+    expect(earlyAllowCalls).toBe(0);
 
     const decision = await author.as("User", { id: "u1" }).can("delete").on("Project", { id: "p1" }).explain();
 
     expect(decision.allowed).toBe(false);
-    expect(decision.matchedPolicies.map((policy) => policy.name)).toEqual(["deny delete", "later allow"]);
-    expect(laterAllowCalls).toBe(1);
+    expect(decision.matchedPolicies.map((policy) => policy.name)).toEqual(["deny delete", "early allow"]);
+    expect(earlyAllowCalls).toBe(1);
   });
 
-  test("store helper reads are memoized within one evaluation", async () => {
+  test("direct store helper checks are memoized within one evaluation", async () => {
     const baseStore = memoryStore();
-    let roleReads = 0;
+    let roleChecks = 0;
     const store: AuthorStore = {
       ...baseStore,
-      getRoles: (input) => {
-        roleReads += 1;
-        return baseStore.getRoles(input);
+      getRoles: async () => {
+        throw new Error("ctx.roles.has should use direct hasRole");
+      },
+      hasRole: (input) => {
+        roleChecks += 1;
+        return baseStore.hasRole(input);
       },
     };
     await store.grantRole({ entityType: "User", entityId: "u1", role: "reader" });
@@ -231,6 +331,6 @@ describe("engine optimization", () => {
 
     expect(decision.allowed).toBe(true);
     expect(decision.matchedPolicies.map((policy) => policy.name)).toEqual(["reader one", "reader two"]);
-    expect(roleReads).toBe(1);
+    expect(roleChecks).toBe(1);
   });
 });

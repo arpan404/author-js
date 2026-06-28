@@ -27,6 +27,8 @@ export type RoleGrantInput = Omit<RoleGrant, "id" | "createdAt">;
 export type RevokeRoleInput = RoleGrantInput;
 /** Query for role grants belonging to an entity, optionally scoped. */
 export type GetRolesInput = { entityType: string; entityId: string; scopeType?: string; scopeId?: string };
+/** Direct role existence check. */
+export type HasRoleInput = GetRolesInput & { role: string };
 
 /** Direct permission grant for an entity and resource. */
 export type PermissionGrant = {
@@ -46,6 +48,8 @@ export type PermissionGrantInput = Omit<PermissionGrant, "id" | "createdAt">;
 export type RevokePermissionInput = PermissionGrantInput;
 /** Query for permission grants belonging to an entity, optionally filtered by resource. */
 export type GetPermissionsInput = { entityType: string; entityId: string; resourceType?: string; resourceId?: string };
+/** Direct permission existence check. */
+export type HasPermissionInput = GetPermissionsInput & { action: string };
 
 /** Relationship tuple for ReBAC checks, e.g. `User:user_1 owner Project:project_1`. */
 export type RelationTuple = {
@@ -64,6 +68,8 @@ export type RelationTupleInput = Omit<RelationTuple, "id" | "createdAt">;
 export type DeleteRelationInput = RelationTupleInput;
 /** Relation query. Omitted fields act as wildcards. */
 export type GetRelationsInput = Partial<RelationTupleInput>;
+/** Direct relation existence check. */
+export type HasRelationInput = GetRelationsInput;
 
 /** Audit log entry written after an authorization decision. */
 export type AuditEntry = {
@@ -84,18 +90,24 @@ export type AuditEntry = {
 export interface AuthorStore {
   /** Lists roles for an entity, optionally scoped. */
   getRoles(input: GetRolesInput): Promise<RoleGrant[]>;
+  /** Optional direct role existence check used by hot authorization helpers. */
+  hasRole?(input: HasRoleInput): Promise<boolean>;
   /** Grants a role to an entity. */
   grantRole(input: RoleGrantInput): Promise<void>;
   /** Revokes a role from an entity. */
   revokeRole(input: RevokeRoleInput): Promise<void>;
   /** Lists direct permission grants for an entity. */
   getPermissions(input: GetPermissionsInput): Promise<PermissionGrant[]>;
+  /** Optional direct permission existence check used by hot authorization helpers. */
+  hasPermission?(input: HasPermissionInput): Promise<boolean>;
   /** Grants a direct permission to an entity. */
   grantPermission(input: PermissionGrantInput): Promise<void>;
   /** Revokes a direct permission from an entity. */
   revokePermission(input: RevokePermissionInput): Promise<void>;
   /** Lists relation tuples matching a partial query. */
   getRelations(input: GetRelationsInput): Promise<RelationTuple[]>;
+  /** Optional direct relation existence check used by hot authorization helpers. */
+  hasRelation?(input: HasRelationInput): Promise<boolean>;
   /** Creates a relation tuple. Implementations should ignore duplicates when possible. */
   createRelation(input: RelationTupleInput): Promise<void>;
   /** Deletes a relation tuple. */

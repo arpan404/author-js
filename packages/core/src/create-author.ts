@@ -9,7 +9,13 @@ import {
   UnknownEntityTypeError,
   UnknownResourceTypeError,
 } from "./errors.js";
-import { normalizePolicyResult, type AuthorPolicyContext, type Policy } from "./policy.js";
+import {
+  normalizePolicyResult,
+  type AuthorPolicyContext,
+  type AuthorRule,
+  type DecisionHook,
+  type Policy,
+} from "./policy.js";
 import { memoryStore } from "./memory-store.js";
 import type { AuthorModule } from "./module.js";
 import type {
@@ -19,6 +25,9 @@ import type {
   GetPermissionsInput,
   GetRelationsInput,
   GetRolesInput,
+  HasPermissionInput,
+  HasRelationInput,
+  HasRoleInput,
   Mode,
   ParentRef,
   ParentResolver,
@@ -87,6 +96,25 @@ type CombinedPolicyContext<
   Modules extends readonly AnyAuthorModule[],
   CustomContext extends Record<string, unknown>,
 > = PolicyContext<Entities, CombinedResources<Resources, Modules>, CustomContext>;
+export type AuditMode = "all" | "explain" | "none";
+type EvaluationOperation = "check" | "evaluate";
+const wildcardScope = Symbol("author.wildcardScope");
+type ScopeKey = string | typeof wildcardScope;
+type IndexedPolicy<Ctx> = { readonly order: number; readonly policy: Policy<Ctx> };
+type IndexedHook<Ctx> = { readonly order: number; readonly hook: DecisionHook<Ctx> };
+type RuleBucket<Ctx> = {
+  readonly policies: IndexedPolicy<Ctx>[];
+  readonly afterDecision: IndexedHook<Ctx>[];
+};
+type RuleIndex<Ctx> = Map<ScopeKey, Map<ScopeKey, Map<ScopeKey, RuleBucket<Ctx>>>>;
+type RuleSelection<Ctx> = {
+  readonly policies: {
+    readonly all: readonly Policy<Ctx>[];
+    readonly denies: readonly Policy<Ctx>[];
+    readonly allows: readonly Policy<Ctx>[];
+  };
+  readonly afterDecision: readonly DecisionHook<Ctx>[];
+};
 
 /** Configuration for `createAuthor`. */
 export type CreateAuthorInput<
@@ -100,11 +128,13 @@ export type CreateAuthorInput<
   resources?: Resources;
   context?: ContextDefinition<CustomContext>;
   /** Global policies that apply across modules. */
-  policies?: readonly Policy<CombinedPolicyContext<Entities, Resources, Modules, CustomContext>>[];
+  policies?: readonly AuthorRule<CombinedPolicyContext<Entities, Resources, Modules, CustomContext>>[];
   /** Domain modules merged into this author instance. */
   modules?: Modules;
   store?: AuthorStore;
   mode?: Mode;
+  /** Controls audit writes. `all` logs checks and explanations; `explain` logs only full decisions; `none` disables audit writes. */
+  audit?: AuditMode;
   /** Optional decision cache. Include resource/context data in cache keys to avoid cross-request collisions. */
   cache?: AuthorCache;
   /** TTL for cached decisions. Defaults to 30 seconds when `cache` is provided. */
@@ -185,16 +215,12 @@ export function createAuthor<
   type RuntimeResources = CombinedResources<Resources, Modules>;
   const store = input.store ?? memoryStore();
   const mode = input.mode ?? "backend";
+  const auditMode = input.audit ?? "all";
   const cacheTtlMs = input.cacheTtlMs ?? 30_000;
   const resources = mergeResources(input.resources, input.modules);
-  const policies = mergePolicies(input.policies, input.modules);
+  const rules = mergeRules(input.policies, input.modules);
   const resourceActionSets = buildResourceActionSets(resources);
-  const policyPlan = buildPolicyPlan({
-    policies,
-    entities: input.entities,
-    resources,
-  });
-  const emptyPolicyList: readonly Policy<unknown>[] = [];
+  const ruleIndex = buildRuleIndex(rules);
 
   function prepareEvaluation(request: EvaluateInput<CustomContext>) {
     const startedAt = performance.now();
@@ -211,8 +237,7 @@ export function createAuthor<
       resourceDefinition,
       entityId: entityDefinition.id(request.entity),
       resourceId: resourceDefinition.id(request.resource),
-      policies:
-        policyPlan.get(selectionKey(request.entityType, request.resourceType, request.action)) ?? emptyPolicyList,
+      selection: selectRules(ruleIndex, request.entityType, request.resourceType, request.action),
     };
   }
 
@@ -237,14 +262,11 @@ export function createAuthor<
     return input.cacheKey ? input.cacheKey(cacheInput) : decisionCacheKey(cacheInput);
   }
 
-  async function evaluate(request: EvaluateInput<CustomContext>): Promise<Decision> {
-    const prepared = prepareEvaluation(request);
-    const cacheKey = await cacheKeyFor(request, prepared.entityId, prepared.resourceId);
-    if (cacheKey) {
-      const cached = await input.cache?.get(cacheKey);
-      if (cached) return cached;
-    }
-    const ctx = buildContext({
+  function createContext(
+    request: EvaluateInput<CustomContext>,
+    prepared: ReturnType<typeof prepareEvaluation>,
+  ): PolicyContext<EntityMap, ResourceMap, CustomContext> {
+    return buildContext({
       entity: request.entity,
       action: request.action,
       resourceType: request.resourceType,
@@ -258,12 +280,30 @@ export function createAuthor<
       resourceDefinition: prepared.resourceDefinition,
       entitlements: input.entitlements,
     });
+  }
+
+  async function evaluateFull(
+    request: EvaluateInput<CustomContext>,
+    operation: EvaluationOperation,
+  ): Promise<Decision> {
+    const prepared = prepareEvaluation(request);
+    const cacheKey = await cacheKeyFor(request, prepared.entityId, prepared.resourceId);
+    if (cacheKey) {
+      const cached = await input.cache?.get(cacheKey);
+      if (cached) {
+        if (prepared.selection.afterDecision.length > 0) {
+          await runAfterDecisionHooks(prepared.selection.afterDecision, createContext(request, prepared), cached);
+        }
+        return cached;
+      }
+    }
+    const ctx = createContext(request, prepared);
 
     const matchedAllows: Decision["matchedPolicies"] = [];
     const matchedDenies: Decision["matchedPolicies"] = [];
     const skippedPolicies: Decision["skippedPolicies"] = [];
 
-    for (const policy of prepared.policies) {
+    for (const policy of prepared.selection.policies.all) {
       const raw = await policy.check(ctx);
       const result = normalizePolicyResult(policy, raw);
       if (result.effect === "skip") {
@@ -292,67 +332,106 @@ export function createAuthor<
 
     if (cacheKey) await input.cache?.set(cacheKey, decision, cacheTtlMs);
 
-    await writeDecisionAuditLog(store, decision);
+    await finishDecision({
+      store,
+      auditMode,
+      operation,
+      hooks: prepared.selection.afterDecision,
+      ctx,
+      decision,
+    });
 
     return decision;
   }
 
+  async function evaluate(request: EvaluateInput<CustomContext>): Promise<Decision> {
+    return evaluateFull(request, "evaluate");
+  }
+
   async function evaluateAllowed(request: EvaluateInput<CustomContext>): Promise<boolean> {
-    if (input.cache) return (await evaluate(request)).allowed;
+    if (input.cache) return (await evaluateFull(request, "check")).allowed;
 
     const prepared = prepareEvaluation(request);
-    const ctx = buildContext({
-      entity: request.entity,
-      action: request.action,
-      resourceType: request.resourceType,
-      resourceId: prepared.resourceId,
-      resource: request.resource,
-      context: request.context,
-      mode: request.mode,
-      store,
-      entityType: request.entityType,
-      entityId: prepared.entityId,
-      resourceDefinition: prepared.resourceDefinition,
-      entitlements: input.entitlements,
-    });
-    const auditMatches = store.writeAuditLog ? { allows: [] as string[], denies: [] as string[] } : null;
-    let allowReason: string | null = null;
+    const ctx = createContext(request, prepared);
 
-    for (const policy of prepared.policies) {
+    for (const policy of prepared.selection.policies.denies) {
       const raw = await policy.check(ctx);
       const result = normalizePolicyResult(policy, raw);
 
       if (result.effect === "deny") {
-        auditMatches?.denies.push(policy.name);
-        await writeBooleanAuditLog({
-          store,
-          request,
+        const decision = makeDecision({
+          action: request.action,
+          entityType: request.entityType,
           entityId: prepared.entityId,
+          resourceType: request.resourceType,
           resourceId: prepared.resourceId,
-          allowed: false,
-          reason: result.reason,
-          matchedPolicies: auditMatches ? [...auditMatches.denies, ...auditMatches.allows] : [],
+          matchedDenies: [{ name: policy.name, effect: "deny", reason: result.reason }],
+          matchedAllows: [],
+          skippedPolicies: [],
+          mode: request.mode,
+          durationMs: performance.now() - prepared.startedAt,
+        });
+        await finishDecision({
+          store,
+          auditMode,
+          operation: "check",
+          hooks: prepared.selection.afterDecision,
+          ctx,
+          decision,
         });
         return false;
       }
+    }
 
+    for (const policy of prepared.selection.policies.allows) {
+      const raw = await policy.check(ctx);
+      const result = normalizePolicyResult(policy, raw);
       if (result.effect === "allow") {
-        auditMatches?.allows.push(policy.name);
-        allowReason ??= result.reason;
+        const decision = makeDecision({
+          action: request.action,
+          entityType: request.entityType,
+          entityId: prepared.entityId,
+          resourceType: request.resourceType,
+          resourceId: prepared.resourceId,
+          matchedDenies: [],
+          matchedAllows: [{ name: policy.name, effect: "allow", reason: result.reason }],
+          skippedPolicies: [],
+          mode: request.mode,
+          durationMs: performance.now() - prepared.startedAt,
+        });
+        await finishDecision({
+          store,
+          auditMode,
+          operation: "check",
+          hooks: prepared.selection.afterDecision,
+          ctx,
+          decision,
+        });
+        return true;
       }
     }
 
-    const allowed = allowReason !== null;
-    await writeBooleanAuditLog({
-      store,
-      request,
+    const decision = makeDecision({
+      action: request.action,
+      entityType: request.entityType,
       entityId: prepared.entityId,
+      resourceType: request.resourceType,
       resourceId: prepared.resourceId,
-      allowed,
-      reason: allowReason ?? "No matching allow policy",
-      matchedPolicies: auditMatches ? [...auditMatches.denies, ...auditMatches.allows] : [],
+      matchedDenies: [],
+      matchedAllows: [],
+      skippedPolicies: [],
+      mode: request.mode,
+      durationMs: performance.now() - prepared.startedAt,
     });
-    return allowed;
+    await finishDecision({
+      store,
+      auditMode,
+      operation: "check",
+      hooks: prepared.selection.afterDecision,
+      ctx,
+      decision,
+    });
+    return false;
   }
 
   return {
@@ -573,31 +652,37 @@ function buildContext<CustomContext extends Record<string, unknown>>(input: {
       },
     },
     relations: {
-      has: async (query) => (await memoizedStore.getRelations(query)).length > 0,
+      has: async (query) => {
+        if (memoizedStore.hasRelation) return memoizedStore.hasRelation(query);
+        return (await memoizedStore.getRelations(query)).length > 0;
+      },
       list: (query) => memoizedStore.getRelations(query),
     },
-    entityHasRelation: async (relation) =>
-      (
-        await memoizedStore.getRelations({
-          subjectType: input.entityType,
-          subjectId: input.entityId,
-          relation,
-          objectType: input.resourceType,
-          objectId: input.resourceId,
-        })
-      ).length > 0,
+    entityHasRelation: async (relation) => {
+      const query = {
+        subjectType: input.entityType,
+        subjectId: input.entityId,
+        relation,
+        objectType: input.resourceType,
+        objectId: input.resourceId,
+      };
+      if (memoizedStore.hasRelation) return memoizedStore.hasRelation(query);
+      return (await memoizedStore.getRelations(query)).length > 0;
+    },
     roles: {
       has: async (role, scope) => {
-        const roles = await memoizedStore.getRoles(roleQuery(input.entityType, input.entityId, scope));
+        const query = roleQuery(input.entityType, input.entityId, scope);
+        if (memoizedStore.hasRole) return memoizedStore.hasRole({ ...query, role });
+        const roles = await memoizedStore.getRoles(query);
         return roles.some((grant) => grant.role === role);
       },
       list: (scope) => memoizedStore.getRoles(roleQuery(input.entityType, input.entityId, scope)),
     },
     permissions: {
       has: async (action, resource) => {
-        const permissions = await memoizedStore.getPermissions(
-          permissionQuery(input.entityType, input.entityId, resource),
-        );
+        const query = permissionQuery(input.entityType, input.entityId, resource);
+        if (memoizedStore.hasPermission) return memoizedStore.hasPermission({ ...query, action });
+        const permissions = await memoizedStore.getPermissions(query);
         const deny = permissions.some((grant) => grant.action === action && grant.effect === "deny");
         const allow = permissions.some((grant) => grant.action === action && grant.effect === "allow");
         return !deny && allow;
@@ -681,12 +766,16 @@ function createParentResolver(input: {
     },
     async hasRole(role, parentName) {
       const parent = required(parentName);
-      const roles = await input.store.getRoles(roleQuery(input.entityType, input.entityId, parent));
+      const query = roleQuery(input.entityType, input.entityId, parent);
+      if (input.store.hasRole) return input.store.hasRole({ ...query, role });
+      const roles = await input.store.getRoles(query);
       return roles.some((grant) => grant.role === role);
     },
     async hasPermission(action, parentName) {
       const parent = required(parentName);
-      const permissions = await input.store.getPermissions(permissionQuery(input.entityType, input.entityId, parent));
+      const query = permissionQuery(input.entityType, input.entityId, parent);
+      if (input.store.hasPermission) return input.store.hasPermission({ ...query, action });
+      const permissions = await input.store.getPermissions(query);
       return (
         !permissions.some((grant) => grant.action === action && grant.effect === "deny") &&
         permissions.some((grant) => grant.action === action && grant.effect === "allow")
@@ -694,17 +783,15 @@ function createParentResolver(input: {
     },
     async hasRelation(relation, parentName) {
       const parent = required(parentName);
-      return (
-        (
-          await input.store.getRelations({
-            subjectType: input.entityType,
-            subjectId: input.entityId,
-            relation,
-            objectType: parent.type,
-            objectId: parent.id,
-          })
-        ).length > 0
-      );
+      const query = {
+        subjectType: input.entityType,
+        subjectId: input.entityId,
+        relation,
+        objectType: parent.type,
+        objectId: parent.id,
+      };
+      if (input.store.hasRelation) return input.store.hasRelation(query);
+      return (await input.store.getRelations(query)).length > 0;
     },
   };
 }
@@ -749,61 +836,117 @@ function addResources(
   }
 }
 
-function mergePolicies(
-  rootPolicies: readonly Policy<unknown>[] | undefined,
+function mergeRules(
+  rootRules: readonly AuthorRule<unknown>[] | undefined,
   modules: readonly AnyAuthorModule[] | undefined,
-): readonly Policy<unknown>[] {
-  return [...(rootPolicies ?? []), ...(modules ?? []).flatMap((module) => module.policies)];
+): readonly AuthorRule<unknown>[] {
+  return [...(rootRules ?? []), ...(modules ?? []).flatMap((module) => module.policies)];
 }
 
-function buildPolicyPlan<Ctx>(input: {
-  policies: readonly Policy<Ctx>[];
-  entities: EntityMap;
-  resources: ResourceMap;
-}): ReadonlyMap<string, readonly Policy<Ctx>[]> {
-  const entityTypes = Object.keys(input.entities);
-  const resources = Object.entries(input.resources);
-  const plan = new Map<string, Policy<Ctx>[]>();
+function buildRuleIndex<Ctx>(rules: readonly AuthorRule<Ctx>[]): RuleIndex<Ctx> {
+  const index: RuleIndex<Ctx> = new Map();
+  for (const [order, rule] of rules.entries()) {
+    addRuleToIndex(index, rule, order);
+  }
+  return index;
+}
 
-  for (const entityType of entityTypes) {
-    for (const [resourceType, resource] of resources) {
-      for (const action of resource.actions) {
-        plan.set(selectionKey(entityType, resourceType, action), []);
+function addRuleToIndex<Ctx>(index: RuleIndex<Ctx>, rule: AuthorRule<Ctx>, order: number): void {
+  for (const entityType of scopeKeys(rule.scope?.entityTypes)) {
+    for (const resourceType of scopeKeys(rule.scope?.resourceTypes)) {
+      for (const action of scopeKeys(rule.scope?.actions)) {
+        const bucket = bucketFor(index, entityType, resourceType, action);
+        if (rule.phase === "decision") bucket.policies.push({ order, policy: rule });
+        else bucket.afterDecision.push({ order, hook: rule });
+      }
+    }
+  }
+}
+
+function selectRules<Ctx>(
+  index: RuleIndex<Ctx>,
+  entityType: string,
+  resourceType: string,
+  action: string,
+): RuleSelection<Ctx> {
+  const indexedPolicies: IndexedPolicy<Ctx>[] = [];
+  const indexedHooks: IndexedHook<Ctx>[] = [];
+
+  for (const entityKey of requestScopeKeys(entityType)) {
+    const resources = index.get(entityKey);
+    if (!resources) continue;
+    for (const resourceKey of requestScopeKeys(resourceType)) {
+      const actions = resources.get(resourceKey);
+      if (!actions) continue;
+      for (const actionKey of requestScopeKeys(action)) {
+        const bucket = actions.get(actionKey);
+        if (!bucket) continue;
+        indexedPolicies.push(...bucket.policies);
+        indexedHooks.push(...bucket.afterDecision);
       }
     }
   }
 
-  for (const policy of input.policies) {
-    const scopedEntityTypes = selectPolicyScopeValues(entityTypes, policy.scope?.entityTypes);
-    for (const entityType of scopedEntityTypes) {
-      for (const [resourceType, resource] of resources) {
-        if (!scopeIncludes(policy.scope?.resourceTypes, resourceType)) continue;
+  const all = uniqueSortedPolicies(indexedPolicies);
+  return {
+    policies: {
+      all,
+      denies: all.filter((policy) => policy.effect === "deny"),
+      allows: all.filter((policy) => policy.effect === "allow"),
+    },
+    afterDecision: uniqueSortedHooks(indexedHooks),
+  };
+}
 
-        const scopedActions = selectPolicyScopeValues(resource.actions, policy.scope?.actions);
-        for (const action of scopedActions) {
-          plan.get(selectionKey(entityType, resourceType, action))?.push(policy);
-        }
-      }
-    }
+function bucketFor<Ctx>(
+  index: RuleIndex<Ctx>,
+  entityType: ScopeKey,
+  resourceType: ScopeKey,
+  action: ScopeKey,
+): RuleBucket<Ctx> {
+  const resources = getOrCreate(index, entityType, () => new Map<ScopeKey, Map<ScopeKey, RuleBucket<Ctx>>>());
+  const actions = getOrCreate(resources, resourceType, () => new Map<ScopeKey, RuleBucket<Ctx>>());
+  return getOrCreate(actions, action, () => ({ policies: [], afterDecision: [] }));
+}
+
+function getOrCreate<Key, Value>(map: Map<Key, Value>, key: Key, create: () => Value): Value {
+  const existing = map.get(key);
+  if (existing !== undefined) return existing;
+  const value = create();
+  map.set(key, value);
+  return value;
+}
+
+function scopeKeys(scopedValues: readonly string[] | undefined): readonly ScopeKey[] {
+  return scopedValues === undefined ? [wildcardScope] : scopedValues;
+}
+
+function requestScopeKeys(value: string): readonly ScopeKey[] {
+  return [value, wildcardScope];
+}
+
+function uniqueSortedPolicies<Ctx>(indexedPolicies: readonly IndexedPolicy<Ctx>[]): readonly Policy<Ctx>[] {
+  const seen = new Set<number>();
+  const unique: IndexedPolicy<Ctx>[] = [];
+  for (const indexedPolicy of indexedPolicies) {
+    if (seen.has(indexedPolicy.order)) continue;
+    seen.add(indexedPolicy.order);
+    unique.push(indexedPolicy);
   }
-
-  return plan;
+  unique.sort((left, right) => left.order - right.order);
+  return unique.map((indexedPolicy) => indexedPolicy.policy);
 }
 
-function selectPolicyScopeValues(
-  availableValues: readonly string[],
-  scopedValues: readonly string[] | undefined,
-): readonly string[] {
-  if (scopedValues === undefined) return availableValues;
-  return availableValues.filter((value) => scopedValues.includes(value));
-}
-
-function scopeIncludes(scopedValues: readonly string[] | undefined, value: string): boolean {
-  return scopedValues === undefined || scopedValues.includes(value);
-}
-
-function selectionKey(entityType: string, resourceType: string, action: string): string {
-  return `${entityType.length}:${entityType}|${resourceType.length}:${resourceType}|${action.length}:${action}`;
+function uniqueSortedHooks<Ctx>(indexedHooks: readonly IndexedHook<Ctx>[]): readonly DecisionHook<Ctx>[] {
+  const seen = new Set<number>();
+  const unique: IndexedHook<Ctx>[] = [];
+  for (const indexedHook of indexedHooks) {
+    if (seen.has(indexedHook.order)) continue;
+    seen.add(indexedHook.order);
+    unique.push(indexedHook);
+  }
+  unique.sort((left, right) => left.order - right.order);
+  return unique.map((indexedHook) => indexedHook.hook);
 }
 
 async function writeDecisionAuditLog(store: AuthorStore, decision: Decision): Promise<void> {
@@ -821,34 +964,40 @@ async function writeDecisionAuditLog(store: AuthorStore, decision: Decision): Pr
   });
 }
 
-async function writeBooleanAuditLog<CustomContext extends Record<string, unknown>>(input: {
+async function finishDecision(input: {
   store: AuthorStore;
-  request: EvaluateInput<CustomContext>;
-  entityId: string;
-  resourceId: string;
-  allowed: boolean;
-  reason: string;
-  matchedPolicies: readonly string[];
+  auditMode: AuditMode;
+  operation: EvaluationOperation;
+  hooks: readonly DecisionHook<unknown>[];
+  ctx: unknown;
+  decision: Decision;
 }): Promise<void> {
-  await input.store.writeAuditLog?.({
-    id: crypto.randomUUID(),
-    entityType: input.request.entityType,
-    entityId: input.entityId,
-    action: input.request.action,
-    resourceType: input.request.resourceType,
-    resourceId: input.resourceId,
-    allowed: input.allowed,
-    reason: input.reason,
-    matchedPolicies: [...input.matchedPolicies],
-    createdAt: new Date(),
-  });
+  if (shouldAudit(input.auditMode, input.operation)) await writeDecisionAuditLog(input.store, input.decision);
+  await runAfterDecisionHooks(input.hooks, input.ctx, input.decision);
+}
+
+function shouldAudit(auditMode: AuditMode, operation: EvaluationOperation): boolean {
+  return auditMode === "all" || (auditMode === "explain" && operation === "evaluate");
+}
+
+async function runAfterDecisionHooks<Ctx>(
+  hooks: readonly DecisionHook<Ctx>[],
+  ctx: Ctx,
+  decision: Decision,
+): Promise<void> {
+  for (const hook of hooks) {
+    await hook.run(ctx, decision);
+  }
 }
 
 function memoizeStoreReads(store: AuthorStore): AuthorStore {
   const roles = new Map<string, Promise<RoleGrant[]>>();
+  const roleChecks = new Map<string, Promise<boolean>>();
   const permissions = new Map<string, Promise<PermissionGrant[]>>();
+  const permissionChecks = new Map<string, Promise<boolean>>();
   const relations = new Map<string, Promise<RelationTuple[]>>();
-  const reads = {
+  const relationChecks = new Map<string, Promise<boolean>>();
+  const reads: AuthorStore = {
     getRoles: (input: GetRolesInput) => memoizePromise(roles, queryKey(input), () => store.getRoles(input)),
     getPermissions: (input: GetPermissionsInput) =>
       memoizePromise(permissions, queryKey(input), () => store.getPermissions(input)),
@@ -862,9 +1011,26 @@ function memoizeStoreReads(store: AuthorStore): AuthorStore {
     deleteRelation: (input: DeleteRelationInput) => store.deleteRelation(input),
   };
 
-  const writeAuditLog = store.writeAuditLog;
-  if (!writeAuditLog) return reads;
-  return { ...reads, writeAuditLog: (entry) => writeAuditLog.call(store, entry) };
+  const hasRole = store.hasRole?.bind(store);
+  if (hasRole) {
+    reads.hasRole = (input: HasRoleInput) => memoizePromise(roleChecks, queryKey(input), () => hasRole(input));
+  }
+
+  const hasPermission = store.hasPermission?.bind(store);
+  if (hasPermission) {
+    reads.hasPermission = (input: HasPermissionInput) =>
+      memoizePromise(permissionChecks, queryKey(input), () => hasPermission(input));
+  }
+
+  const hasRelation = store.hasRelation?.bind(store);
+  if (hasRelation) {
+    reads.hasRelation = (input: HasRelationInput) =>
+      memoizePromise(relationChecks, queryKey(input), () => hasRelation(input));
+  }
+
+  const writeAuditLog = store.writeAuditLog?.bind(store);
+  if (writeAuditLog) reads.writeAuditLog = (entry) => writeAuditLog(entry);
+  return reads;
 }
 
 function memoizePromise<Value>(
@@ -888,7 +1054,7 @@ function once<Value>(load: () => Promise<Value>): () => Promise<Value> {
   };
 }
 
-function queryKey(input: GetRolesInput | GetPermissionsInput | GetRelationsInput): string {
+function queryKey(input: object): string {
   return Object.entries(input)
     .filter((entry) => entry[1] !== undefined)
     .sort(([left], [right]) => left.localeCompare(right))
