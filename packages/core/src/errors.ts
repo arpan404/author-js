@@ -1,4 +1,4 @@
-import type { Decision } from "./types";
+import type { Decision } from "./types.js";
 
 /** Base error for all Author JS runtime failures. */
 export class AuthorError extends Error {

@@ -1,2 +1,2 @@
-export { requireCan } from "./middleware";
-export type { RequireCanOptions } from "./middleware";
+export { requireCan } from "./middleware.js";
+export type { RequireCanOptions } from "./middleware.js";

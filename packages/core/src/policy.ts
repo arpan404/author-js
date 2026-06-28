@@ -1,4 +1,4 @@
-import type { AuthorStore, Mode, ParentResolver, PermissionGrant, RelationTuple, RoleGrant, ScopeInput, ResourceInput, PolicyEffect } from "./types";
+import type { AuthorStore, Mode, ParentResolver, PermissionGrant, RelationTuple, RoleGrant, ScopeInput, ResourceInput, PolicyEffect } from "./types.js";
 
 /** Result returned by a policy checker after normalization. */
 export type PolicyResult =

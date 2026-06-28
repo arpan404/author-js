@@ -1,2 +1,2 @@
-export { requireCan } from "./middleware";
-export type { FastifyRequireCanOptions } from "./middleware";
+export { requireCan } from "./middleware.js";
+export type { FastifyRequireCanOptions } from "./middleware.js";

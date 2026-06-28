@@ -1,5 +1,5 @@
-import type { AuditEntry, AuthorStore, DeleteRelationInput, GetPermissionsInput, GetRelationsInput, GetRolesInput, PermissionGrant, PermissionGrantInput, PolicyEffect, RelationTuple, RelationTupleInput, RevokePermissionInput, RevokeRoleInput, RoleGrant, RoleGrantInput } from "../../core/src/index";
-import { mongoCollections } from "./collections";
+import type { AuditEntry, AuthorStore, DeleteRelationInput, GetPermissionsInput, GetRelationsInput, GetRolesInput, PermissionGrant, PermissionGrantInput, PolicyEffect, RelationTuple, RelationTupleInput, RevokePermissionInput, RevokeRoleInput, RoleGrant, RoleGrantInput } from "../../core/src/index.js";
+import { mongoCollections } from "./collections.js";
 
 type MongoQuery = Record<string, unknown>;
 type MongoFindResult = { toArray(): Promise<readonly unknown[]> };

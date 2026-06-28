@@ -1,2 +1,2 @@
-export { requireCan } from "./middleware";
-export type { HonoRequireCanOptions } from "./middleware";
+export { requireCan } from "./middleware.js";
+export type { HonoRequireCanOptions } from "./middleware.js";

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Decision, Mode } from "../../core/src/index";
+import type { Decision, Mode } from "../../core/src/index.js";
 
 /** Minimal author instance shape consumed by the React adapter. */
 export type ReactAuthor = {

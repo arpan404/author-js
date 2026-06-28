@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import type { AuditEntry, AuthorStore, DeleteRelationInput, GetPermissionsInput, GetRelationsInput, GetRolesInput, PermissionGrant, PermissionGrantInput, PolicyEffect, RelationTuple, RelationTupleInput, RevokePermissionInput, RevokeRoleInput, RoleGrant, RoleGrantInput } from "../../core/src/index";
+import type { AuditEntry, AuthorStore, DeleteRelationInput, GetPermissionsInput, GetRelationsInput, GetRolesInput, PermissionGrant, PermissionGrantInput, PolicyEffect, RelationTuple, RelationTupleInput, RevokePermissionInput, RevokeRoleInput, RoleGrant, RoleGrantInput } from "../../core/src/index.js";
 
 /** Minimal pg-compatible client interface used by the PostgreSQL adapter. */
 export type PostgresClient = {

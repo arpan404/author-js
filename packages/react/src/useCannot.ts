@@ -1,5 +1,5 @@
-import { useCan } from "./useCan";
-import type { UseCanInput, UseCanResult } from "./types";
+import { useCan } from "./useCan.js";
+import type { UseCanInput, UseCanResult } from "./types.js";
 
 /** Runs an async `cannot` check by inverting `useCan`. */
 export function useCannot(input: UseCanInput): UseCanResult {

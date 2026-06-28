@@ -1,4 +1,4 @@
-import { AuthorizationDeniedError, type Decision } from "../../core/src/index";
+import { AuthorizationDeniedError, type Decision } from "../../core/src/index.js";
 
 type MaybePromise<T> = T | Promise<T>;
 type AuthorLike = {

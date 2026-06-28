@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { AuthorContextValue } from "./types";
+import type { AuthorContextValue } from "./types.js";
 
 export const AuthorContext = createContext<AuthorContextValue | null>(null);
 

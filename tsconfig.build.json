@@ -3,6 +3,8 @@
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "dist",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "types": ["bun"],
     "declaration": true,
     "declarationMap": true,

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { useOptionalAuthor } from "./author-context";
-import type { Decision } from "../../core/src/index";
-import type { UseCanInput, UseCanResult } from "./types";
+import { useOptionalAuthor } from "./author-context.js";
+import type { Decision } from "../../core/src/index.js";
+import type { UseCanInput, UseCanResult } from "./types.js";
 
 const missingProvider = new Error("AuthorProvider is required");
 const missingEntity = new Error("Author entity is required");

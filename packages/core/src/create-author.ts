@@ -1,8 +1,8 @@
-import type { EntityDefinition, ResourceDefinition } from "./definitions";
-import { AuthorizationDeniedError, UnknownActionError, UnknownEntityTypeError, UnknownResourceTypeError } from "./errors";
-import { normalizePolicyResult, type AuthorPolicyContext, type Policy } from "./policy";
-import { memoryStore } from "./memory-store";
-import type { AuthorStore, Decision, GetPermissionsInput, GetRolesInput, Mode, ParentRef, ParentResolver, PolicyEffect, ResourceInput, ScopeInput } from "./types";
+import type { EntityDefinition, ResourceDefinition } from "./definitions.js";
+import { AuthorizationDeniedError, UnknownActionError, UnknownEntityTypeError, UnknownResourceTypeError } from "./errors.js";
+import { normalizePolicyResult, type AuthorPolicyContext, type Policy } from "./policy.js";
+import { memoryStore } from "./memory-store.js";
+import type { AuthorStore, Decision, GetPermissionsInput, GetRolesInput, Mode, ParentRef, ParentResolver, PolicyEffect, ResourceInput, ScopeInput } from "./types.js";
 
 type EntityMap = Record<string, EntityDefinition<unknown, string>>;
 type ResourceMap = Record<string, ResourceDefinition<unknown, string, readonly string[]>>;
