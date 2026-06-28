@@ -226,6 +226,13 @@ function buildContext<CustomContext extends Record<string, unknown>>(input: {
       has: async (query) => (await input.store.getRelations(query)).length > 0,
       list: (query) => input.store.getRelations(query),
     },
+    entityHasRelation: async (relation) => (await input.store.getRelations({
+      subjectType: input.entityType,
+      subjectId: input.entityId,
+      relation,
+      objectType: input.resourceType,
+      objectId: input.resourceId,
+    })).length > 0,
     roles: {
       has: async (role, scope) => {
         const roles = await input.store.getRoles(roleQuery(input.entityType, input.entityId, scope));

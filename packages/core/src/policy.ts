@@ -5,6 +5,8 @@ export type PolicyResult =
   | { effect: "deny"; reason: string }
   | { effect: "skip"; reason?: string };
 
+export type RelationQuery = Partial<RelationTuple>;
+
 export type AuthorPolicyContext<Entity, Resource, CustomContext extends Record<string, unknown>> = {
   entity: Entity;
   action: string;
@@ -14,9 +16,10 @@ export type AuthorPolicyContext<Entity, Resource, CustomContext extends Record<s
   store: AuthorStore;
   parents: ParentResolver;
   relations: {
-    has(input: Partial<RelationTuple>): Promise<boolean>;
-    list(input: Partial<RelationTuple>): Promise<RelationTuple[]>;
+    has(input: RelationQuery): Promise<boolean>;
+    list(input: RelationQuery): Promise<RelationTuple[]>;
   };
+  entityHasRelation(relation: string): Promise<boolean>;
   roles: {
     has(role: string, scope?: ScopeInput): Promise<boolean>;
     list(scope?: ScopeInput): Promise<RoleGrant[]>;
